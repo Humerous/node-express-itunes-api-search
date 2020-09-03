@@ -1,0 +1,77 @@
+body {
+  background-color: #e09b04;
+  margin: 2em 2em;
+
+  display: flex;
+  place-items: center;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* FORM BELOW */
+
+.SearchForm {
+  text-align: center;
+}
+
+input[type='text'] {
+  background-color: transparent;
+  width: 100%;
+  border: 0;
+  border-bottom: solid 1px #fff;
+  padding-bottom: 4px;
+  color: #000;
+  font-weight: lighter;
+  letter-spacing: 2px;
+  margin: 0 20px 30px 0;
+  font-size: 20px;
+}
+
+input[type='text'] {
+  outline: none;
+}
+
+input:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 30px #e09b04 inset;
+  -webkit-text-fill-color: #000;
+}
+
+select {
+  background-color: #e09b04;
+  width: 100%;
+  border: 0;
+  border-bottom: solid 1px #fff;
+  padding-bottom: 4px;
+  color: #000;
+  font-weight: lighter;
+  letter-spacing: 2px;
+  margin: 0 20px 30px 0;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+option {
+  background-color: transparent;
+  width: 50%;
+  border: 0;
+  padding-bottom: 4px;
+  color: #e09b04;
+  font-weight: lighter;
+  letter-spacing: 2px;
+  margin: 0 20px 30px 0;
+  font-size: 20px;
+}
+
+select:focus > option:hover {
+  background: #ec0101;
+}
+
+button {
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 35px;
+  margin-left: 30px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  font-size: 20px;
+  cursor: pointer;
+}

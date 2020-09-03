@@ -1,0 +1,317 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`<App /> with no props should match the snapshot 1`] = `"<div class=\\"container-fluid\\"><div class=\\"row\\"><div class=\\"col-sm-8 col-md-8 col-lg-8\\"><div class=\\"SearchOuterShell\\"><div class=\\"SearchOuterContent\\"><div class=\\"SearchOuterHeader\\"><h1 class=\\"SearchOuterHeading\\">Search</h1><ul class=\\"SearchForm nav\\"><form class=\\"\\"><input type=\\"text\\" name=\\"term\\" placeholder=\\"Search titles or genres...\\" class=\\"form-control\\"/><select name=\\"media\\"><option value=\\"all\\">All</option><option value=\\"music\\">Music</option><option value=\\"audiobook\\">Audio Book</option><option value=\\"musicVideo\\">Music Video</option><option value=\\"movie\\">Movie</option><option value=\\"tvShow\\">TV Show</option><option value=\\"podcast\\">Podcast</option><option value=\\"ebook\\">E Book</option></select><button class=\\"btn btn-primary\\">Search</button></form></ul></div><div class=\\"container-fluid\\"><div class=\\"row row-cols-1 row-cols-md-2 row-cols-lg-3\\"></div></div></div></div></div><div class=\\"col-sm-4 col-md-4 col-lg-4\\"><div class=\\"FavOuterShell\\"><div class=\\"FavOuterContent\\"><div class=\\"FavOuterHeader\\"><h1 class=\\"FavHeading\\">Favourites</h1></div><div><div class=\\"table-responsive\\"><table variant=\\"dark\\" class=\\"table table-md table-hover\\"><thead class=\\"TableHead\\"><tr><th colSpan=\\"2\\">Title</th><th>Artist</th><th colSpan=\\"2\\">Genre</th></tr></thead><tbody></tbody></table></div></div></div></div></div></div></div>"`;
+
+exports[`<App /> with no props should render properly 1`] = `
+<div
+  className="container-fluid"
+>
+  <div
+    className="row"
+  >
+    <div
+      className="col-sm-8 col-md-8 col-lg-8"
+    >
+      <div
+        className="SearchOuterShell"
+      >
+        <div
+          className="SearchOuterContent"
+        >
+          <div
+            className="SearchOuterHeader"
+          >
+            <h1
+              className="SearchOuterHeading"
+            >
+              Search
+            </h1>
+            <ul
+              className="SearchForm nav"
+            >
+              <form
+                className=""
+                onSubmit={[Function]}
+              >
+                <input
+                  className="form-control"
+                  name="term"
+                  placeholder="Search titles or genres..."
+                  type="text"
+                />
+                <select
+                  name="media"
+                >
+                  <option
+                    value="all"
+                  >
+                    All
+                  </option>
+                  <option
+                    value="music"
+                  >
+                    Music
+                  </option>
+                  <option
+                    value="audiobook"
+                  >
+                    Audio Book
+                  </option>
+                  <option
+                    value="musicVideo"
+                  >
+                    Music Video
+                  </option>
+                  <option
+                    value="movie"
+                  >
+                    Movie
+                  </option>
+                  <option
+                    value="tvShow"
+                  >
+                    TV Show
+                  </option>
+                  <option
+                    value="podcast"
+                  >
+                    Podcast
+                  </option>
+                  <option
+                    value="ebook"
+                  >
+                    E Book
+                  </option>
+                </select>
+                <button
+                  aria-label={null}
+                  className="btn btn-primary"
+                  onClick={[Function]}
+                >
+                  Search
+                </button>
+              </form>
+            </ul>
+          </div>
+          <div
+            className="container-fluid"
+          >
+            <div
+              className="row row-cols-1 row-cols-md-2 row-cols-lg-3"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+    <div
+      className="col-sm-4 col-md-4 col-lg-4"
+    >
+      <div
+        className="FavOuterShell"
+      >
+        <div
+          className="FavOuterContent"
+        >
+          <div
+            className="FavOuterHeader"
+          >
+            <h1
+              className="FavHeading"
+            >
+              Favourites
+            </h1>
+          </div>
+          <div>
+            <div
+              className="table-responsive"
+            >
+              <table
+                className="table table-md table-hover"
+                variant="dark"
+              >
+                <thead
+                  className="TableHead"
+                >
+                  <tr>
+                    <th
+                      colSpan="2"
+                    >
+                      Title
+                    </th>
+                    <th>
+                      Artist
+                    </th>
+                    <th
+                      colSpan="2"
+                    >
+                      Genre
+                    </th>
+                  </tr>
+                </thead>
+                <tbody />
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`renders correctly 1`] = `
+<div
+  className="container-fluid"
+>
+  <div
+    className="row"
+  >
+    <div
+      className="col-sm-8 col-md-8 col-lg-8"
+    >
+      <div
+        className="SearchOuterShell"
+      >
+        <div
+          className="SearchOuterContent"
+        >
+          <div
+            className="SearchOuterHeader"
+          >
+            <h1
+              className="SearchOuterHeading"
+            >
+              Search
+            </h1>
+            <ul
+              className="SearchForm nav"
+            >
+              <form
+                className=""
+                onSubmit={[Function]}
+              >
+                <input
+                  className="form-control"
+                  name="term"
+                  placeholder="Search titles or genres..."
+                  type="text"
+                />
+                <select
+                  name="media"
+                >
+                  <option
+                    value="all"
+                  >
+                    All
+                  </option>
+                  <option
+                    value="music"
+                  >
+                    Music
+                  </option>
+                  <option
+                    value="audiobook"
+                  >
+                    Audio Book
+                  </option>
+                  <option
+                    value="musicVideo"
+                  >
+                    Music Video
+                  </option>
+                  <option
+                    value="movie"
+                  >
+                    Movie
+                  </option>
+                  <option
+                    value="tvShow"
+                  >
+                    TV Show
+                  </option>
+                  <option
+                    value="podcast"
+                  >
+                    Podcast
+                  </option>
+                  <option
+                    value="ebook"
+                  >
+                    E Book
+                  </option>
+                </select>
+                <button
+                  aria-label={null}
+                  className="btn btn-primary"
+                  onClick={[Function]}
+                >
+                  Search
+                </button>
+              </form>
+            </ul>
+          </div>
+          <div
+            className="container-fluid"
+          >
+            <div
+              className="row row-cols-1 row-cols-md-2 row-cols-lg-3"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+    <div
+      className="col-sm-4 col-md-4 col-lg-4"
+    >
+      <div
+        className="FavOuterShell"
+      >
+        <div
+          className="FavOuterContent"
+        >
+          <div
+            className="FavOuterHeader"
+          >
+            <h1
+              className="FavHeading"
+            >
+              Favourites
+            </h1>
+          </div>
+          <div>
+            <div
+              className="table-responsive"
+            >
+              <table
+                className="table table-md table-hover"
+                variant="dark"
+              >
+                <thead
+                  className="TableHead"
+                >
+                  <tr>
+                    <th
+                      colSpan="2"
+                    >
+                      Title
+                    </th>
+                    <th>
+                      Artist
+                    </th>
+                    <th
+                      colSpan="2"
+                    >
+                      Genre
+                    </th>
+                  </tr>
+                </thead>
+                <tbody />
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;
