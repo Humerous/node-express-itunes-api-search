@@ -32,29 +32,29 @@ You're sections headers will be used to reference location of destination.
 
 ## Installation
 
-`01.\DOWNLOAD THE ZIP REPOSITORT`
-`02.\_UNZIP`
-`03.\_CD INTO PROJECT`
-`04.\_NPM INSTALL`
-`05.\_CD INTO PROJECT IN CLIENT FOLDER`
-`06.\_NPM INSTALL`
-`07.\CD OUT AND BACK INTO ROOT FOLDER`
-`08.\_NPM RUN DEV - USING CONCURRENTLY TO RUN BOTH SERVERS IN ONE COMMAND`
-`10.\_ENJOY!`
+- `01.\DOWNLOAD THE ZIP REPOSITORT`
+- `02.\_UNZIP`
+- `03.\_CD INTO PROJECT`
+- `04.\_NPM INSTALL`
+- `05.\_CD INTO PROJECT IN CLIENT FOLDER`
+- `06.\_NPM INSTALL`
+- `07.\CD OUT AND BACK INTO ROOT FOLDER`
+- `08.\_NPM RUN DEV - USING CONCURRENTLY TO RUN BOTH SERVERS IN ONE COMMAND`
+- `10.\_ENJOY!`
 
 `OR`
 
-`01.\DOWNLOAD THE ZIP REPOSITORT`
-`02.\_UNZIP`
-`03.\_CD INTO PROJECT`
-`04.\_NPM INSTALL`
-`05.\_NPM START`
-`06.\_CD INTO PROJECT IN CLIENT FOLDER`
-`07.\_NPM INSTALL`
-`08.\_NPM START`
-`09.\_ENJOY!`
+- `01.\DOWNLOAD THE ZIP REPOSITORT`
+- `02.\_UNZIP`
+- `03.\_CD INTO PROJECT`
+- `04.\_NPM INSTALL`
+- `05.\_NPM START`
+- `06.\_CD INTO PROJECT IN CLIENT FOLDER`
+- `07.\_NPM INSTALL`
+- `08.\_NPM START`
+- `09.\_ENJOY!`
 
-`11.\ NB ** If having trouble with dual servers running : run this command "sudo killall -9 node!" to kill all servers. **`
+- `11.\ NB ** If having trouble with dual servers running : run this command "sudo killall -9 node!" to kill all servers. **`
 
 ## References
 
