@@ -1,21 +1,19 @@
 import React from 'react';
 import axios from 'axios';
 
-// <!---- STYLE SHEET ---->
 import './App.css';
 
-// <!---- IMPORT REACT STRAP ---->
 import { Container, Col, Row } from 'reactstrap';
 
-// <!---- IMPORT COMPONENTS ---->
 import Search from './components/Search/Search';
 import SearchResults from './components/SearchResults/SearchResults';
 import Favourites from './components/Favourites/Favourites';
 
-// <!---- FONT AWESOME SCRIPT ---->
 import { library } from '@fortawesome/fontawesome-svg-core';
 import { faThumbsUp, faDumpster } from '@fortawesome/free-solid-svg-icons';
 library.add(faThumbsUp, faDumpster);
+
+const FAVOURITES_STORAGE_KEY = 'itunes-api-search-favourites';
 
 class App extends React.Component {
   state = {
@@ -24,66 +22,66 @@ class App extends React.Component {
     error: undefined,
   };
 
-  // ONLOAD FUNCTION
-  componentWillMount = () => {
-    axios.get('/api/favourites').then(
-      (response) => {
-        console.log(response.data);
-        this.setState({
-          favourites: response.data,
-        });
-      },
-      (error) => {
-        console.log(error);
-        this.setState({
-          error,
-          favourites: [],
-        });
-      }
+  componentDidMount() {
+    try {
+      const stored = window.localStorage.getItem(FAVOURITES_STORAGE_KEY);
+      const favourites = stored ? JSON.parse(stored) : [];
+      this.setState({ favourites: Array.isArray(favourites) ? favourites : [] });
+    } catch (error) {
+      console.log(error);
+      this.setState({ error, favourites: [] });
+    }
+  }
+
+  persistFavourites = (favourites) => {
+    window.localStorage.setItem(
+      FAVOURITES_STORAGE_KEY,
+      JSON.stringify(favourites)
     );
   };
 
-  //POST NEW FAVOURITE
   addFavourites = (result) => {
-    axios
-      .post('/api/favourites', {
-        trackId: result.trackId,
-        title: result.trackName,
-        artist: result.artistName,
-        kind: result.kind,
-      })
-      .then((response) => {
-        const newFavourites = [...this.state.favourites];
-        newFavourites.push(response.data);
-        this.setState({ favourites: newFavourites });
-      })
-      .catch((error) => console.log(`${error}`));
+    const newFavourite = {
+      trackId: result.trackId,
+      title: result.trackName,
+      artist: result.artistName,
+      kind: result.kind,
+    };
+
+    const exists = this.state.favourites.some(
+      (item) => item.trackId === newFavourite.trackId
+    );
+
+    if (exists) return;
+
+    const favourites = [...this.state.favourites, newFavourite];
+    this.persistFavourites(favourites);
+    this.setState({ favourites });
   };
 
-  //DELETE FAVOURITES
   deleteFavourite = (trackId) => {
-    axios
-      .delete('/api/favourites', { params: { 'track-id': trackId } })
-      .then((res) => {
-        const filteredFavourites = this.state.favourites.filter(
-          (item) => item.trackId !== trackId
-        );
-        this.setState({ favourites: filteredFavourites });
-      })
-      .catch((error) => console.log(`Error message: ${error}`));
+    const favourites = this.state.favourites.filter(
+      (item) => item.trackId !== trackId
+    );
+
+    this.persistFavourites(favourites);
+    this.setState({ favourites });
   };
 
-  ////SEARCH ITUNE FUNCTION
   searchAPIitunes = async (e) => {
     e.preventDefault();
     const term = e.target.term.value;
     const media = e.target.media.value;
+
     axios
-      .get(`/api/favourites/${term}/${media}`)
+      .get(`/api/favourites/${encodeURIComponent(term)}/${encodeURIComponent(media)}`)
       .then((response) => {
-        this.setState({ results: response.data });
+        this.setState({ results: response.data, error: undefined });
       })
-      .catch((error) => console.log(`Error message: ${error}`));
+      .catch((error) => {
+        console.log(`Error message: ${error}`);
+        this.setState({ error });
+      });
   };
 
   render() {
