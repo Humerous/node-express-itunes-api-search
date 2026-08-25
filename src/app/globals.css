@@ -1,0 +1,101 @@
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
+@import '@fontsource/poppins/600.css';
+
+:root {
+  --navy: #0D1424;
+  --indigo: #2C3E92;
+  --violet: #6C5CE7;
+  --coral: #FF6B4A;
+  --green: #22C55E;
+  --blue: #405CFF;
+  --cyan: #29C6FF;
+  --yellow: #E9DD27;
+  --orange: #FF9F16;
+  --red: #D92D20;
+  --canvas: #F1F5F9;
+  --surface: #FFFFFF;
+  --muted: #6E788B;
+  --line: #DDE3EC;
+  --control-border: #D9DEEA;
+  --control-border-hover: #BFC7D8;
+  --control-height: 48px;
+  --control-height-small: 40px;
+  --control-radius: 12px;
+  --control-radius-small: 10px;
+  --control-gap: 10px;
+  --header-height: 72px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 0;
+  scroll-snap-type: none;
+  background: var(--canvas);
+}
+
+body {
+  margin: 0;
+  color: var(--navy);
+  background: var(--canvas);
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  line-height: 1.5;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button,
+a,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+a {
+  color: inherit;
+}
+
+::selection {
+  color: #fff;
+  background: var(--violet);
+}
+
+:focus-visible {
+  outline: 3px solid rgba(108, 92, 231, 0.35);
+  outline-offset: 3px;
+}
+
+@media (max-width: 760px) {
+  :root {
+    --header-height: 64px;
+  }
+
+  html {
+    scroll-padding-top: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

@@ -1,99 +1,56 @@
-# node-express-itunes-api-search
-# Simple Node js with Express Server with REST API
+# MediaShelf
 
-A simple app with the the uses Express server offering a REST API with Node.js.
+**Search. Discover. Save.**
 
-Deployed here: https://node-express-itunes-api-search.herokuapp.com/
+MediaShelf is a modern rebuild of a 2020 Node/Express iTunes Search portfolio
+application. It preserves the original Search → Results → Favourites concept
+while rebuilding the product with a 2026 Next.js/TypeScript architecture,
+responsive design, local collections and controlled Apple storefront search.
 
-### Table of Contents
+## Development
 
-You're sections headers will be used to reference location of destination.
+```bash
+npm install
+npm run storefronts:update
+npm run typecheck
+npm run lint
+npm run build
+npm run dev
+```
 
-- [Features](#features)
-- [Requirements](#requirements)
-- [Installation](#installation)
-- [GET Routes](#getroutes)
-- [Beyond GET Routes](#beyondgetroutes)
-- [Postman](#postman)
-- [References](#references)
-- [License](#license)
-- [Author Info](#author-info)
+## Data source
 
-## Features
+Search results come from Apple's iTunes Search API.
 
-- Node js
-- Express
-- itunes-search-api
-- Fetch API
+Country/region availability is generated from Apple's current media-services
+availability support page rather than assuming every ISO country is a valid
+media storefront.
 
-## Requirements
+## Global search
 
-- [node & npm](https://nodejs.org/en/)
+Apple's Search API is storefront-specific and approximately limited to
+20 calls per minute. MediaShelf's All Countries mode is therefore progressive,
+cached, deduplicated, pausable and deliberately rate-limited.
 
-## Installation
+## Persistence
 
-- `01.\DOWNLOAD THE ZIP REPOSITORT`
-- `02.\_UNZIP`
-- `03.\_CD INTO PROJECT`
-- `04.\_NPM INSTALL`
-- `05.\_CD INTO PROJECT IN CLIENT FOLDER`
-- `06.\_NPM INSTALL`
-- `07.\CD OUT AND BACK INTO ROOT FOLDER`
-- `08.\_NPM RUN DEV - USING CONCURRENTLY TO RUN BOTH SERVERS IN ONE COMMAND`
-- `10.\_ENJOY!`
+Local browser storage is used for:
+- saved media,
+- custom collections,
+- recent searches,
+- preferences.
 
-`OR`
+Browser session storage is used for:
+- current results,
+- progressive global-scan state,
+- short-lived per-country search cache.
 
-- `01.\DOWNLOAD THE ZIP REPOSITORT`
-- `02.\_UNZIP`
-- `03.\_CD INTO PROJECT`
-- `04.\_NPM INSTALL`
-- `05.\_NPM START`
-- `06.\_CD INTO PROJECT IN CLIENT FOLDER`
-- `07.\_NPM INSTALL`
-- `08.\_NPM START`
-- `09.\_ENJOY!`
+No account or database is required.
 
-- `11.\ NB ** If having trouble with dual servers running : run this command "sudo killall -9 node!" to kill all servers. **`
+## Portfolio framing
 
-## References
+A legacy Node/Express media-search application modernised into a responsive,
+accessible product while preserving its original Search → Results → Favourites
+workflow.
 
-Hyperion Development Bootcamp
-
-[Back To The Top](#read-me-template)
-
----
-
-## License
-
-MIT License
-
-Copyright (c) [2020][david k miller]
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
-[Back To The Top](#read-me-template)
-
----
-
-## Author Info
-
-- Twitter - [@DavidMillerster](https://twitter.com/DavidMillerster)
-
-[Back To The Top](#read-me-template)
+Built by Chameleon Unicode Studios.
