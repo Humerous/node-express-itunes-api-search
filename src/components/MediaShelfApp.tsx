@@ -56,14 +56,135 @@ const RECENT_KEY = 'mediashelf:v2:recent';
 const PREFS_KEY = 'mediashelf:v2:prefs';
 const SNAPSHOT_KEY = 'mediashelf:v2:last-search';
 const PENDING_GLOBAL_SEARCH_KEY = 'mediashelf:v2:pending-global-search';
+const OPEN_COLLECTION_KEY = 'mediashelf:v2:open-collection';
+const COLLECTION_NAME_MAX_LENGTH = 60;
+const THEME_DISCOVERY_KEY = 'mediashelf:v2:theme-discovery';
 
 const GLOBAL_REQUEST_INTERVAL_MS = 3_500;
 const GLOBAL_RESULT_LIMIT = 800;
 const GLOBAL_COUNTRY_RESULT_LIMIT = 25;
 const SNAPSHOT_TTL_MS = 30 * 60 * 1000;
+const MAX_SHARED_COLLECTION_ITEMS = 24;
+const QUICK_DISCOVERY_MAX_STOREFRONTS = 6;
+const QUICK_DISCOVERY_RESULT_TARGET = 20;
+let quickDiscoveryLastNetworkRequestAt = 0;
+
+// HOME DISCOVERY COLLECTIONS / INLINE EMAIL
+const HOME_COLLECTION_POOL: Array<{
+  id: string;
+  title: string;
+  description: string;
+  term: string;
+  media: MediaValue;
+}> = [
+  {
+    id: 'feel-good',
+    title: 'Feel Good',
+    description: 'Bright, upbeat picks for an easy listen.',
+    term: 'feel good',
+    media: 'music',
+  },
+  {
+    id: 'throwbacks',
+    title: 'Throwbacks',
+    description: 'Older favourites and familiar classics.',
+    term: 'classic hits',
+    media: 'music',
+  },
+  {
+    id: 'film-night',
+    title: 'Film Night',
+    description: 'A random film direction for tonight.',
+    term: 'adventure',
+    media: 'movie',
+  },
+  {
+    id: 'podcast-rabbit-hole',
+    title: 'Podcast Rabbit Hole',
+    description: 'Something interesting to keep listening to.',
+    term: 'stories',
+    media: 'podcast',
+  },
+  {
+    id: 'deep-focus',
+    title: 'Deep Focus',
+    description: 'Low-distraction music for getting things done.',
+    term: 'focus',
+    media: 'music',
+  },
+  {
+    id: 'story-time',
+    title: 'Story Time',
+    description: 'Audiobooks worth disappearing into.',
+    term: 'fiction',
+    media: 'audiobook',
+  },
+  {
+    id: 'road-trip',
+    title: 'Road Trip',
+    description: 'Music for a long drive and no fixed plan.',
+    term: 'road trip',
+    media: 'music',
+  },
+  {
+    id: 'late-night',
+    title: 'Late Night',
+    description: 'A slower collection for after dark.',
+    term: 'late night',
+    media: 'music',
+  },
+  {
+    id: 'documentary-mood',
+    title: 'Documentary Mood',
+    description: 'Films when you want something real.',
+    term: 'documentary',
+    media: 'movie',
+  },
+  {
+    id: 'podcast-learn',
+    title: 'Learn Something',
+    description: 'Podcasts for curiosity and useful detours.',
+    term: 'science',
+    media: 'podcast',
+  },
+  {
+    id: 'acoustic-morning',
+    title: 'Acoustic Morning',
+    description: 'A softer start to the day.',
+    term: 'acoustic',
+    media: 'music',
+  },
+  {
+    id: 'hidden-gems',
+    title: 'Hidden Gems',
+    description: 'Take a less obvious route through the catalogue.',
+    term: 'independent',
+    media: 'music',
+  },
+];
+
+
 
 function currentTimestamp() {
   return Date.now();
+}
+
+const GLOBAL_SHELF_CONTEXT = 'global';
+
+function shelfSearchLabel(code: string) {
+  return code === GLOBAL_SHELF_CONTEXT
+    ? 'All Countries'
+    : storefrontLabel(code);
+}
+
+function appleStorefrontMeta(item: MediaItem) {
+  const code =
+    item.sourceStorefront ??
+    (item.storefront !== GLOBAL_SHELF_CONTEXT ? item.storefront : '');
+
+  return code
+    ? `Apple storefront — ${storefrontLabel(code)} (${code.toUpperCase()})`
+    : '';
 }
 
 type SortMode = 'relevance' | 'title' | 'artist';
@@ -72,6 +193,12 @@ type ViewMode = 'grid' | 'list';
 interface PendingGlobalSearch {
   term: string;
   media: MediaValue;
+  timestamp: number;
+}
+
+interface StoredThemeDiscovery {
+  title: string;
+  items: MediaItem[];
   timestamp: number;
 }
 
@@ -109,6 +236,89 @@ function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+// SHAREABLE COLLECTION FLOW
+interface SharedCollectionPayload {
+  version: 1;
+  collectionId: string;
+  name: string;
+  items: MediaItem[];
+}
+
+function isSharedCollectionPayload(
+  value: unknown
+): value is SharedCollectionPayload {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const payload = value as Partial<SharedCollectionPayload>;
+
+  return (
+    payload.version === 1 &&
+    typeof payload.collectionId === 'string' &&
+    payload.collectionId.length > 0 &&
+    payload.collectionId.length <= 120 &&
+    typeof payload.name === 'string' &&
+    payload.name.length > 0 &&
+    payload.name.length <= 80 &&
+    Array.isArray(payload.items) &&
+    payload.items.length <= MAX_SHARED_COLLECTION_ITEMS &&
+    payload.items.every(
+      (item) =>
+        item &&
+        typeof item.id === 'string' &&
+        typeof item.title === 'string' &&
+        typeof item.artist === 'string' &&
+        typeof item.collection === 'string' &&
+        typeof item.genre === 'string' &&
+        typeof item.kind === 'string' &&
+        typeof item.artworkUrl === 'string' &&
+        typeof item.sourceUrl === 'string' &&
+        typeof item.storefront === 'string'
+    )
+  );
+}
+
+function encodeSharedCollection(payload: SharedCollectionPayload) {
+  const bytes = new TextEncoder().encode(JSON.stringify(payload));
+  let binary = '';
+
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+
+  return window
+    .btoa(binary)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+function decodeSharedCollection(
+  encoded: string
+): SharedCollectionPayload | null {
+  try {
+    const normalised = encoded
+      .replace(/-/g, '+')
+      .replace(/_/g, '/');
+    const padded =
+      normalised +
+      '='.repeat((4 - (normalised.length % 4)) % 4);
+    const binary = window.atob(padded);
+    const bytes = Uint8Array.from(
+      binary,
+      (character) => character.charCodeAt(0)
+    );
+    const parsed = JSON.parse(
+      new TextDecoder().decode(bytes)
+    ) as unknown;
+
+    return isSharedCollectionPayload(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 function formatKind(kind: string) {
   return kind
     .replace(/([a-z])([A-Z])/g, '$1 $2')
@@ -116,6 +326,388 @@ function formatKind(kind: string) {
     .toUpperCase();
 }
 
+function mediaIdentityForKind(kind: string): MediaValue {
+  const value = kind.toLowerCase();
+
+  if (value.includes('music-video') || value.includes('music video')) {
+    return 'musicVideo';
+  }
+
+  if (value.includes('audiobook')) {
+    return 'audiobook';
+  }
+
+  if (value.includes('podcast')) {
+    return 'podcast';
+  }
+
+  if (value.includes('movie') || value.includes('film')) {
+    return 'movie';
+  }
+
+  if (value.includes('tv')) {
+    return 'tvShow';
+  }
+
+  if (value.includes('ebook')) {
+    return 'ebook';
+  }
+
+  if (value.includes('song') || value.includes('music')) {
+    return 'music';
+  }
+
+  return 'all';
+}
+
+function collectionMediaIdentity(collection: ShelfCollection): MediaValue {
+  const identities = Array.from(
+    new Set(
+      (collection.items ?? [])
+        .map((item) => mediaIdentityForKind(item.kind))
+        .filter((value) => value !== 'all')
+    )
+  );
+
+  return identities.length === 1 ? identities[0] : 'all';
+}
+
+// RESULTS RELATED COLLECTIONS + EMAIL UI
+
+function readyMadeCollectionTerms(title: string, fallback: string) {
+  const terms: Record<string, string[]> = {
+    'Feel Good': [
+      'happy pop',
+      'summer hits',
+      'good vibes',
+      'upbeat music',
+    ],
+    Throwbacks: [
+      'classic hits',
+      '80s pop',
+      '90s hits',
+      'retro favourites',
+    ],
+    'Film Night': [
+      'movie soundtrack',
+      'cinematic score',
+      'film music',
+      'soundtrack classics',
+    ],
+    'Podcast Rabbit Hole': [
+      'great stories',
+      'culture podcast',
+      'curious minds',
+      'true stories',
+    ],
+    'Deep Focus': [
+      'focus music',
+      'ambient',
+      'instrumental',
+      'study music',
+    ],
+    'Story Time': [
+      'fiction audiobook',
+      'short stories',
+      'classic fiction',
+      'novel audiobook',
+    ],
+    'Road Trip': [
+      'road trip',
+      'driving music',
+      'classic rock',
+      'summer pop',
+    ],
+    'Late Night': [
+      'late night',
+      'chill r&b',
+      'downtempo',
+      'night drive',
+    ],
+    'Documentary Mood': [
+      'documentary',
+      'history',
+      'nature documentary',
+      'biography',
+    ],
+    'Learn Something': [
+      'science podcast',
+      'history podcast',
+      'technology podcast',
+      'education podcast',
+    ],
+    'Acoustic Morning': [
+      'acoustic',
+      'singer songwriter',
+      'unplugged',
+      'folk pop',
+    ],
+    'Hidden Gems': [
+      'independent music',
+      'indie',
+      'alternative',
+      'emerging artists',
+    ],
+  };
+
+  return terms[title] ?? [fallback];
+}
+
+async function quickGlobalDiscovery({
+  term,
+  media,
+  signal,
+  targetItems,
+  maxItems = targetItems,
+}: {
+  term: string;
+  media: MediaValue;
+  signal: AbortSignal;
+  targetItems: number;
+  maxItems?: number;
+}) {
+  let discovered: MediaItem[] = [];
+  const queue = orderedGlobalStorefronts('za').slice(
+    0,
+    QUICK_DISCOVERY_MAX_STOREFRONTS
+  );
+
+  for (let index = 0; index < queue.length; index += 1) {
+    if (signal.aborted || discovered.length >= targetItems) {
+      break;
+    }
+
+    const country = queue[index];
+
+    try {
+      const cached = readCountryCache(term, media, country.code);
+
+      if (!cached) {
+        const elapsed =
+          currentTimestamp() - quickDiscoveryLastNetworkRequestAt;
+
+        if (elapsed < GLOBAL_REQUEST_INTERVAL_MS) {
+          await sleep(GLOBAL_REQUEST_INTERVAL_MS - elapsed);
+        }
+      }
+
+      const { response, fromCache } = await searchCountry({
+        term,
+        media,
+        storefront: country.code,
+        signal,
+        limit: Math.min(25, Math.max(targetItems, 12)),
+      });
+
+      if (!fromCache) {
+        quickDiscoveryLastNetworkRequestAt = currentTimestamp();
+      }
+
+      const globalContextResults = response.results.map((item) => ({
+        ...item,
+        sourceStorefront:
+          item.sourceStorefront ?? item.storefront ?? country.code,
+        storefront: GLOBAL_SHELF_CONTEXT,
+      }));
+
+      discovered = mergeUniqueResults(
+        discovered,
+        globalContextResults,
+        maxItems
+      );
+    } catch (error) {
+      if (signal.aborted) {
+        throw error;
+      }
+
+      // Quick discovery deliberately continues after a storefront miss.
+      quickDiscoveryLastNetworkRequestAt = currentTimestamp();
+    }
+  }
+
+  return discovered.slice(0, maxItems);
+}
+
+async function buildMixedCollection({
+  seedItems = [],
+  searchTerms,
+  media,
+  storefront,
+  maxItems = 12,
+}: {
+  seedItems?: MediaItem[];
+  searchTerms: string[];
+  media: MediaValue;
+  storefront: string;
+  maxItems?: number;
+}) {
+  let mixed = mergeUniqueResults([], seedItems, maxItems);
+  const uniqueTerms = Array.from(
+    new Set(
+      searchTerms
+        .map((value) => value.trim())
+        .filter(Boolean)
+    )
+  );
+
+  const controller = new AbortController();
+
+  if (storefront === ALL_COUNTRIES) {
+    for (const searchTerm of uniqueTerms) {
+      if (mixed.length >= maxItems) {
+        break;
+      }
+
+      try {
+        const discovered = await quickGlobalDiscovery({
+          term: searchTerm,
+          media,
+          signal: controller.signal,
+          targetItems: maxItems - mixed.length,
+          maxItems: maxItems - mixed.length,
+        });
+
+        mixed = mergeUniqueResults(mixed, discovered, maxItems);
+      } catch {
+        // A quick-global related-search miss should not block collection creation.
+      }
+    }
+
+    return mixed.slice(0, maxItems);
+  }
+
+  for (const searchTerm of uniqueTerms) {
+    if (mixed.length >= maxItems) {
+      break;
+    }
+
+    try {
+      const { response } = await searchCountry({
+        term: searchTerm,
+        media,
+        storefront,
+        signal: controller.signal,
+        limit: 8,
+      });
+
+      mixed = mergeUniqueResults(
+        mixed,
+        response.results.slice(0, 4),
+        maxItems
+      );
+    } catch {
+      // A related-search miss should not block the collection.
+    }
+  }
+
+  return mixed.slice(0, maxItems);
+}
+
+const DIALOG_FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
+function getDialogFocusableElements(container: HTMLElement) {
+  return Array.from(
+    container.querySelectorAll<HTMLElement>(
+      DIALOG_FOCUSABLE_SELECTOR
+    )
+  ).filter(
+    (element) =>
+      !element.hasAttribute('hidden') &&
+      element.getAttribute('aria-hidden') !== 'true'
+  );
+}
+
+function focusInitialDialogControl(container: HTMLElement | null) {
+  if (!container) {
+    return;
+  }
+
+  const preferred = container.querySelector<HTMLElement>(
+    '[data-dialog-initial-focus]'
+  );
+  const first = getDialogFocusableElements(container)[0];
+
+  (preferred ?? first ?? container).focus();
+}
+
+function trapDialogFocus(
+  event: {
+    key: string;
+    shiftKey: boolean;
+    preventDefault: () => void;
+  },
+  container: HTMLElement
+) {
+  if (event.key !== 'Tab') {
+    return;
+  }
+
+  const focusable = getDialogFocusableElements(container);
+
+  if (!focusable.length) {
+    event.preventDefault();
+    container.focus();
+    return;
+  }
+
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  const active = document.activeElement;
+
+  if (event.shiftKey) {
+    if (active === first || !container.contains(active)) {
+      event.preventDefault();
+      last.focus();
+    }
+    return;
+  }
+
+  if (active === last || !container.contains(active)) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+function activeFocusTarget() {
+  const active = document.activeElement;
+
+  if (
+    active instanceof HTMLElement &&
+    active !== document.body &&
+    active !== document.documentElement
+  ) {
+    return active;
+  }
+
+  return null;
+}
+
+function restoreDialogFocus(target: HTMLElement | null) {
+  window.requestAnimationFrame(() => {
+    if (target?.isConnected) {
+      target.focus();
+      return;
+    }
+
+    document.getElementById('main-content')?.focus();
+  });
+}
+
+// V4 BLOCK 7.1 — back-to-top visibility is scroll-aware.
+// V4 BLOCK 7.3 — release defects: restart confirmation / storefront provenance / results query.
+// V4 BLOCK 7.4 — release fixes: clean restart / All Countries shelf search context.
+// V4 BLOCK 7.5 — release fix: restart race / Apple storefront provenance.
+// V4 BLOCK 7.5.1 — storefront provenance label polish.
+// V4 BLOCK 7.5.2 — complete Reset filters state clear.
+// V4 BLOCK 7.5.3 V2 — reset action label matches full reset behavior.
+// V4 BLOCK 7.5.4 — browser reload clears current Search/Results state.
 export default function MediaShelfApp({
   routeView,
 }: {
@@ -126,14 +718,35 @@ export default function MediaShelfApp({
 
   const [hydrated, setHydrated] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [showBackTop, setShowBackTop] = useState(false);
   const [term, setTerm] = useState('');
   const [media, setMedia] = useState<MediaValue>('all');
-  const [storefront, setStorefront] = useState('za');
+  const [storefront, setStorefront] = useState(ALL_COUNTRIES);
   const [results, setResults] = useState<MediaItem[]>([]);
   const [sort, setSort] = useState<SortMode>('relevance');
   const [view, setView] = useState<ViewMode>('grid');
   const [visibleCount, setVisibleCount] = useState(16);
   const [recent, setRecent] = useState<RecentSearch[]>([]);
+  const [homeCollections, setHomeCollections] = useState<
+    Array<(typeof HOME_COLLECTION_POOL)[number]>
+  >([]);
+  const [addingHomeCollection, setAddingHomeCollection] = useState('');
+  const [addingResultCollection, setAddingResultCollection] = useState(false);
+  const [relatedCollectionResults, setRelatedCollectionResults] =
+    useState<MediaItem[]>([]);
+  const [relatedCollectionTitle, setRelatedCollectionTitle] =
+    useState('');
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [emailTo, setEmailTo] = useState('');
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailMessage, setEmailMessage] = useState('');
+  const [emailShareUrl, setEmailShareUrl] = useState('');
+  const [emailCollectionItems, setEmailCollectionItems] =
+    useState<MediaItem[]>([]);
+  const [sharedCollectionPreview, setSharedCollectionPreview] =
+    useState<SharedCollectionPayload | null>(null);
+  const [sharedCollectionError, setSharedCollectionError] =
+    useState('');
   const [favourites, setFavourites] = useState<MediaItem[]>([]);
   const [collections, setCollections] = useState<ShelfCollection[]>([]);
   const [activeCollection, setActiveCollection] = useState('all');
@@ -142,6 +755,8 @@ export default function MediaShelfApp({
     () => new Set()
   );
   const [newCollectionName, setNewCollectionName] = useState('');
+  const [renamingCollection, setRenamingCollection] = useState(false);
+  const [renameCollectionName, setRenameCollectionName] = useState('');
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState('');
   const [scan, setScan] = useState<GlobalScanState | null>(null);
@@ -158,6 +773,10 @@ export default function MediaShelfApp({
   const scanCancelledRef = useRef(false);
   const lastNetworkRequestAtRef = useRef(0);
   const pendingGlobalStartedRef = useRef(false);
+  const globalRunVersionRef = useRef(0);
+  const confirmDialogRef = useRef<HTMLDivElement | null>(null);
+  const sharedPreviewDialogRef = useRef<HTMLElement | null>(null);
+  const emailModalRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -167,17 +786,59 @@ export default function MediaShelfApp({
         return;
       }
 
-      const prefs = readJson<StoredPrefs>(
+      const storedPrefs = readJson<StoredPrefs>(
         window.localStorage,
         PREFS_KEY,
         {
           term: '',
           media: 'all',
-          storefront: 'za',
+          storefront: ALL_COUNTRIES,
           sort: 'relevance',
           view: 'grid',
         }
       );
+
+      // Browser refresh is treated as a fresh Search/Results session.
+      // Normal in-app route navigation is NOT a reload, so result handoff still works.
+      const navigationEntry = window.performance
+        .getEntriesByType('navigation')
+        .at(0) as PerformanceNavigationTiming | undefined;
+      const isSearchExperienceReload =
+        navigationEntry?.type === 'reload' &&
+        (routeView === 'search' || routeView === 'results');
+
+      if (isSearchExperienceReload) {
+        storedPrefs.term = '';
+        storedPrefs.media = 'all';
+        storedPrefs.storefront = ALL_COUNTRIES;
+
+        window.localStorage.setItem(
+          PREFS_KEY,
+          JSON.stringify(storedPrefs)
+        );
+        window.sessionStorage.removeItem(SNAPSHOT_KEY);
+        window.sessionStorage.removeItem(PENDING_GLOBAL_SEARCH_KEY);
+        window.sessionStorage.removeItem(THEME_DISCOVERY_KEY);
+      }
+
+      const migrateUntouchedZaDefault =
+        !(storedPrefs.term ?? '').trim() &&
+        storedPrefs.media === 'all' &&
+        storedPrefs.storefront === 'za';
+
+      const prefs: StoredPrefs = migrateUntouchedZaDefault
+        ? {
+            ...storedPrefs,
+            storefront: ALL_COUNTRIES,
+          }
+        : storedPrefs;
+
+      if (migrateUntouchedZaDefault) {
+        window.localStorage.setItem(
+          PREFS_KEY,
+          JSON.stringify(prefs)
+        );
+      }
 
       const safeMedia = isMediaValue(prefs.media)
         ? prefs.media
@@ -189,7 +850,7 @@ export default function MediaShelfApp({
           (item) => item.code === prefs.storefront
         )
           ? prefs.storefront
-          : 'za';
+          : ALL_COUNTRIES;
 
       setTerm(prefs.term ?? '');
       setMedia(safeMedia);
@@ -211,20 +872,58 @@ export default function MediaShelfApp({
           []
         )
       );
-      setFavourites(
-        readJson<MediaItem[]>(
-          window.localStorage,
-          FAVOURITES_KEY,
-          []
-        )
+      const storedFavourites = readJson<MediaItem[]>(
+        window.localStorage,
+        FAVOURITES_KEY,
+        []
       );
-      setCollections(
-        readJson<ShelfCollection[]>(
-          window.localStorage,
-          COLLECTIONS_KEY,
-          []
-        )
+      const storedCollectionsRaw = readJson<ShelfCollection[]>(
+        window.localStorage,
+        COLLECTIONS_KEY,
+        []
       );
+      const storedCollections = storedCollectionsRaw.map(
+        (collection) => {
+          if (Array.isArray(collection.items)) {
+            return collection;
+          }
+
+          const allowed = new Set(collection.itemIds);
+
+          return {
+            ...collection,
+            items: storedFavourites.filter((item) =>
+              allowed.has(item.id)
+            ),
+          };
+        }
+      );
+
+      window.localStorage.setItem(
+        COLLECTIONS_KEY,
+        JSON.stringify(storedCollections)
+      );
+
+      const shareMatch = window.location.hash.match(
+        /^#collection=([^&]+)$/
+      );
+
+      setFavourites(storedFavourites);
+      setCollections(storedCollections);
+
+      if (shareMatch) {
+        const sharedCollection = decodeSharedCollection(shareMatch[1]);
+
+        if (sharedCollection) {
+          setSharedCollectionPreview(sharedCollection);
+          setSharedCollectionError('');
+        } else {
+          setSharedCollectionPreview(null);
+          setSharedCollectionError(
+            'This shared collection link is invalid or too large to preview.'
+          );
+        }
+      }
 
       const snapshot = readJson<SearchSnapshot | null>(
         window.sessionStorage,
@@ -243,6 +942,24 @@ export default function MediaShelfApp({
         setStorefront(snapshot.storefront);
         setResults(snapshot.results);
         setScan(snapshot.scan);
+      }
+
+      const storedTheme = readJson<StoredThemeDiscovery | null>(
+        window.sessionStorage,
+        THEME_DISCOVERY_KEY,
+        null
+      );
+
+      if (
+        storedTheme &&
+        Date.now() - storedTheme.timestamp <= SNAPSHOT_TTL_MS &&
+        storedTheme.title.trim() &&
+        Array.isArray(storedTheme.items)
+      ) {
+        setRelatedCollectionTitle(storedTheme.title);
+        setRelatedCollectionResults(storedTheme.items);
+      } else {
+        window.sessionStorage.removeItem(THEME_DISCOVERY_KEY);
       }
 
       const pending = readJson<PendingGlobalSearch | null>(
@@ -274,6 +991,104 @@ export default function MediaShelfApp({
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!hydrated || routeView !== 'saved') {
+      return;
+    }
+
+    const requestedCollectionId =
+      window.sessionStorage.getItem(OPEN_COLLECTION_KEY);
+
+    if (
+      requestedCollectionId &&
+      collections.some(
+        (collection) => collection.id === requestedCollectionId
+      )
+    ) {
+      setActiveCollection(requestedCollectionId);
+      window.sessionStorage.removeItem(OPEN_COLLECTION_KEY);
+    }
+  }, [collections, hydrated, routeView]);
+
+  useEffect(() => {
+    if (!hydrated || homeCollections.length > 0) {
+      return;
+    }
+
+    const picks = [...HOME_COLLECTION_POOL]
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 6);
+
+    setHomeCollections(picks);
+  }, [hydrated, homeCollections.length]);
+
+  useEffect(() => {
+    const updateBackTopVisibility = () => {
+      setShowBackTop(window.scrollY >= 120);
+    };
+
+    updateBackTopVisibility();
+    window.addEventListener('scroll', updateBackTopVisibility, {
+      passive: true,
+    });
+
+    return () => {
+      window.removeEventListener('scroll', updateBackTopVisibility);
+    };
+  }, []);
+
+  const sharedPreviewOpen = Boolean(
+    sharedCollectionPreview || sharedCollectionError
+  );
+
+  useEffect(() => {
+    if (!confirmDialog) {
+      return;
+    }
+
+    const returnFocus = activeFocusTarget();
+    const frame = window.requestAnimationFrame(() => {
+      focusInitialDialogControl(confirmDialogRef.current);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      restoreDialogFocus(returnFocus);
+    };
+  }, [confirmDialog]);
+
+  useEffect(() => {
+    if (!sharedPreviewOpen) {
+      return;
+    }
+
+    const returnFocus = activeFocusTarget();
+    const frame = window.requestAnimationFrame(() => {
+      focusInitialDialogControl(sharedPreviewDialogRef.current);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      restoreDialogFocus(returnFocus);
+    };
+  }, [sharedPreviewOpen]);
+
+  useEffect(() => {
+    if (!emailModalOpen) {
+      return;
+    }
+
+    const returnFocus = activeFocusTarget();
+    const frame = window.requestAnimationFrame(() => {
+      focusInitialDialogControl(emailModalRef.current);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      restoreDialogFocus(returnFocus);
+    };
+  }, [emailModalOpen]);
 
   function persistPrefs(next: Partial<StoredPrefs> = {}) {
     const value: StoredPrefs = {
@@ -329,6 +1144,35 @@ export default function MediaShelfApp({
     }
   }
 
+  function persistThemeDiscovery(
+    title: string,
+    items: MediaItem[]
+  ) {
+    const value: StoredThemeDiscovery = {
+      title,
+      items,
+      timestamp: currentTimestamp(),
+    };
+
+    setRelatedCollectionTitle(title);
+    setRelatedCollectionResults(items);
+
+    try {
+      window.sessionStorage.setItem(
+        THEME_DISCOVERY_KEY,
+        JSON.stringify(value)
+      );
+    } catch {
+      // Related discovery remains available in memory if storage is full.
+    }
+  }
+
+  function clearThemeDiscovery() {
+    setRelatedCollectionTitle('');
+    setRelatedCollectionResults([]);
+    window.sessionStorage.removeItem(THEME_DISCOVERY_KEY);
+  }
+
   function showToast(message: string) {
     setToast(message);
 
@@ -364,6 +1208,51 @@ export default function MediaShelfApp({
     );
   }
 
+  function collectionNameExists(
+    name: string,
+    excludeCollectionId?: string
+  ) {
+    const key = name.trim().toLocaleLowerCase();
+
+    if (!key) {
+      return false;
+    }
+
+    return collections.some(
+      (collection) =>
+        collection.id !== excludeCollectionId &&
+        collection.name.trim().toLocaleLowerCase() === key
+    );
+  }
+
+  function showDuplicateCollectionName(name: string) {
+    showToast(`A collection named “${name}” already exists.`);
+  }
+
+  function validateCollectionName(
+    name: string,
+    excludeCollectionId?: string
+  ) {
+    if (!name) {
+      showToast('Enter a collection name first');
+      return false;
+    }
+
+    if (name.length > COLLECTION_NAME_MAX_LENGTH) {
+      showToast(
+        `Collection names can be up to ${COLLECTION_NAME_MAX_LENGTH} characters.`
+      );
+      return false;
+    }
+
+    if (collectionNameExists(name, excludeCollectionId)) {
+      showDuplicateCollectionName(name);
+      return false;
+    }
+
+    return true;
+  }
+
   function recordRecent(search: RecentSearch) {
     const next = [
       search,
@@ -379,6 +1268,52 @@ export default function MediaShelfApp({
 
     setRecent(next);
     window.localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+  }
+
+  function removeRecent(search: RecentSearch) {
+    const next = recent.filter(
+      (item) =>
+        !(
+          item.term === search.term &&
+          item.media === search.media &&
+          item.storefront === search.storefront
+        )
+    );
+
+    setRecent(next);
+    window.localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+    showToast('Recent search removed');
+  }
+
+  function clearRecentSearches() {
+    setRecent([]);
+    window.localStorage.removeItem(RECENT_KEY);
+    showToast('Recent searches cleared');
+  }
+
+  function resetFilters() {
+    globalRunVersionRef.current += 1;
+    scanCancelledRef.current = true;
+    abortRef.current?.abort();
+    setSearching(false);
+    setTerm('');
+    setMedia('all');
+    setStorefront(ALL_COUNTRIES);
+    setResults([]);
+    setScan(null);
+    setVisibleCount(16);
+    setError('');
+    setPendingGlobalSearch(null);
+    pendingGlobalStartedRef.current = false;
+    window.sessionStorage.removeItem(SNAPSHOT_KEY);
+    window.sessionStorage.removeItem(PENDING_GLOBAL_SEARCH_KEY);
+    clearThemeDiscovery();
+    persistPrefs({
+      term: '',
+      media: 'all',
+      storefront: ALL_COUNTRIES,
+    });
+    showToast('Search reset');
   }
 
   async function runSpecificSearch({
@@ -400,6 +1335,7 @@ export default function MediaShelfApp({
       return;
     }
 
+    clearThemeDiscovery();
     scanCancelledRef.current = true;
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -463,6 +1399,93 @@ export default function MediaShelfApp({
     }
   }
 
+  async function runQuickDiscoverySearch({
+    nextTerm = term,
+    nextMedia = media,
+    shouldNavigate = true,
+    shouldRecordRecent = true,
+  }: {
+    nextTerm?: string;
+    nextMedia?: MediaValue;
+    shouldNavigate?: boolean;
+    shouldRecordRecent?: boolean;
+  } = {}) {
+    const cleaned = nextTerm.trim();
+
+    if (!cleaned) {
+      return;
+    }
+
+    clearThemeDiscovery();
+    scanCancelledRef.current = true;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    setSearching(true);
+    setError('');
+    setVisibleCount(16);
+    setScan(null);
+    setTerm(cleaned);
+    setMedia(nextMedia);
+    setStorefront(ALL_COUNTRIES);
+
+    persistPrefs({
+      term: cleaned,
+      media: nextMedia,
+      storefront: ALL_COUNTRIES,
+    });
+
+    try {
+      const discovered = await quickGlobalDiscovery({
+        term: cleaned,
+        media: nextMedia,
+        signal: controller.signal,
+        targetItems: QUICK_DISCOVERY_RESULT_TARGET,
+        maxItems: QUICK_DISCOVERY_RESULT_TARGET,
+      });
+
+      setResults(discovered);
+      persistSnapshot(discovered, null, {
+        term: cleaned,
+        media: nextMedia,
+        storefront: ALL_COUNTRIES,
+      });
+
+      if (shouldRecordRecent) {
+        recordRecent({
+          term: cleaned,
+          media: nextMedia,
+          storefront: ALL_COUNTRIES,
+        });
+      }
+
+      if (!discovered.length) {
+        setError(
+          'No results found across the quick global discovery storefronts.'
+        );
+      }
+
+      if (shouldNavigate) {
+        navigateTo('results');
+      }
+    } catch (searchError) {
+      if (controller.signal.aborted) {
+        return;
+      }
+
+      setError(
+        searchError instanceof Error
+          ? searchError.message
+          : 'Quick global discovery failed.'
+      );
+    } finally {
+      if (!controller.signal.aborted) {
+        setSearching(false);
+      }
+    }
+  }
+
   async function waitForGlobalRateSlot() {
     const elapsed =
       currentTimestamp() - lastNetworkRequestAtRef.current;
@@ -488,6 +1511,8 @@ export default function MediaShelfApp({
     if (!cleaned) {
       return;
     }
+
+    clearThemeDiscovery();
 
     if (shouldNavigate && routeView !== 'results') {
       const pending: PendingGlobalSearch = {
@@ -518,6 +1543,7 @@ export default function MediaShelfApp({
     const controller = new AbortController();
     abortRef.current = controller;
     scanCancelledRef.current = false;
+    const runVersion = ++globalRunVersionRef.current;
 
     const queue = orderedGlobalStorefronts('za');
 
@@ -604,13 +1630,24 @@ export default function MediaShelfApp({
           limit: GLOBAL_COUNTRY_RESULT_LIMIT,
         });
 
+        if (runVersion !== globalRunVersionRef.current) {
+          return;
+        }
+
         if (!fromCache) {
           lastNetworkRequestAtRef.current = currentTimestamp();
         }
 
+        const globalContextResults = response.results.map((item) => ({
+          ...item,
+          sourceStorefront:
+            item.sourceStorefront ?? item.storefront ?? country.code,
+          storefront: GLOBAL_SHELF_CONTEXT,
+        }));
+
         merged = mergeUniqueResults(
           merged,
-          response.results,
+          globalContextResults,
           GLOBAL_RESULT_LIMIT
         );
 
@@ -647,6 +1684,10 @@ export default function MediaShelfApp({
         );
         break;
       }
+    }
+
+    if (runVersion !== globalRunVersionRef.current) {
+      return;
     }
 
     const wasCancelled =
@@ -712,6 +1753,26 @@ export default function MediaShelfApp({
     event.preventDefault();
 
     if (storefront === ALL_COUNTRIES) {
+      const hasRestartableGlobalScan =
+        Boolean(scan) &&
+        !scan?.complete &&
+        (scan?.completedCodes.length ?? 0) > 0;
+
+      if (hasRestartableGlobalScan) {
+        const restartTerm = term.trim();
+
+        setConfirmDialog({
+          title: 'Start over?',
+          message: `This will clear the current Global Scan, results and search criteria for “${restartTerm}”, then return you to a clean Search screen. Your Shelf and Recent Searches will not change.`,
+          confirmLabel: 'Start over',
+          onConfirm: () => {
+            resetSearchExperience();
+            navigateTo('search');
+          },
+        });
+        return;
+      }
+
       void runGlobalSearch();
     } else {
       void runSpecificSearch();
@@ -786,6 +1847,73 @@ export default function MediaShelfApp({
     });
   }
 
+  // THREE UX CHANGES - RESET / SURPRISE / OPEN COLLECTION
+  function resetSearchExperience() {
+    globalRunVersionRef.current += 1;
+    scanCancelledRef.current = true;
+    abortRef.current?.abort();
+    setSearching(false);
+    setTerm('');
+    setMedia('all');
+    setStorefront(ALL_COUNTRIES);
+    setResults([]);
+    setScan(null);
+    setVisibleCount(16);
+    setError('');
+    setPendingGlobalSearch(null);
+    pendingGlobalStartedRef.current = false;
+
+    window.sessionStorage.removeItem(SNAPSHOT_KEY);
+    window.sessionStorage.removeItem(PENDING_GLOBAL_SEARCH_KEY);
+    clearThemeDiscovery();
+
+    persistPrefs({
+      term: '',
+      media: 'all',
+      storefront: ALL_COUNTRIES,
+    });
+
+    showToast('Search reset');
+  }
+
+  function surpriseMe() {
+    const surprises: Array<{
+      term: string;
+      media: MediaValue;
+    }> = [
+      { term: 'jazz', media: 'music' },
+      { term: 'adventure', media: 'movie' },
+      { term: 'science', media: 'podcast' },
+      { term: 'history', media: 'audiobook' },
+      { term: 'nature', media: 'tvShow' },
+      { term: 'live', media: 'musicVideo' },
+      { term: 'mystery', media: 'ebook' },
+      { term: 'classic', media: 'music' },
+    ];
+
+    const choice =
+      surprises[Math.floor(Math.random() * surprises.length)];
+
+    if (!choice) {
+      return;
+    }
+
+    if (storefront === ALL_COUNTRIES) {
+      void runQuickDiscoverySearch({
+        nextTerm: choice.term,
+        nextMedia: choice.media,
+      });
+      return;
+    }
+
+    void runSpecificSearch({
+      nextTerm: choice.term,
+      nextMedia: choice.media,
+      nextStorefront: storefront,
+    });
+  }
+
+  // INDEPENDENT COLLECTION STATE
   function toggleFavourite(item: MediaItem) {
     const exists = favourites.some(
       (saved) => saved.id === item.id
@@ -795,15 +1923,7 @@ export default function MediaShelfApp({
       persistFavourites(
         favourites.filter((saved) => saved.id !== item.id)
       );
-      persistCollections(
-        collections.map((collection) => ({
-          ...collection,
-          itemIds: collection.itemIds.filter(
-            (id) => id !== item.id
-          ),
-        }))
-      );
-      showToast('Removed from Your Shelf');
+      showToast('Removed from All Saved. Collections unchanged.');
       return;
     }
 
@@ -850,28 +1970,59 @@ export default function MediaShelfApp({
       return;
     }
 
-    setConfirmDialog({
-      title: 'Delete selected items?',
-      message: `This will remove ${ids.size} saved item${
-        ids.size === 1 ? '' : 's'
-      } from Your Shelf.`,
-      confirmLabel: 'Delete selected',
-      onConfirm: () => {
-        persistFavourites(
-          favourites.filter((item) => !ids.has(item.id))
-        );
+    if (activeCollection === 'all') {
+      setConfirmDialog({
+        title: 'Remove selected from All Saved?',
+        message: `This will remove ${ids.size} item${
+          ids.size === 1 ? '' : 's'
+        } from All Saved. Copies inside your collections will remain.`,
+        confirmLabel: 'Remove selected',
+        onConfirm: () => {
+          persistFavourites(
+            favourites.filter((item) => !ids.has(item.id))
+          );
+          setSelectedShelfIds(new Set());
+          showToast(
+            'Removed from All Saved. Collections unchanged.'
+          );
+        },
+      });
+      return;
+    }
 
+    const collection = collections.find(
+      (item) => item.id === activeCollection
+    );
+
+    if (!collection) {
+      return;
+    }
+
+    setConfirmDialog({
+      title: `Remove selected from ${collection.name}?`,
+      message: `This will remove ${ids.size} item${
+        ids.size === 1 ? '' : 's'
+      } from this collection only. All Saved and other collections will remain unchanged.`,
+      confirmLabel: 'Remove from collection',
+      onConfirm: () => {
         persistCollections(
-          collections.map((collection) => ({
-            ...collection,
-            itemIds: collection.itemIds.filter(
-              (itemId) => !ids.has(itemId)
-            ),
-          }))
+          collections.map((item) =>
+            item.id === activeCollection
+              ? {
+                  ...item,
+                  itemIds: item.itemIds.filter(
+                    (itemId) => !ids.has(itemId)
+                  ),
+                  items: (item.items ?? []).filter(
+                    (mediaItem) => !ids.has(mediaItem.id)
+                  ),
+                }
+              : item
+          )
         );
 
         setSelectedShelfIds(new Set());
-        showToast('Selected items removed');
+        showToast('Removed from this collection only');
       },
     });
   }
@@ -882,22 +2033,18 @@ export default function MediaShelfApp({
     }
 
     setConfirmDialog({
-      title: 'Remove everything from Your Shelf?',
+      title: 'Remove everything from All Saved?',
       message: `This will remove all ${favourites.length} saved item${
         favourites.length === 1 ? '' : 's'
-      }. Your collection names will remain.`,
+      } from All Saved. Your custom collections and their items will remain.`,
       confirmLabel: 'Remove all',
       onConfirm: () => {
         persistFavourites([]);
         setSelectedShelfIds(new Set());
-        persistCollections(
-          collections.map((collection) => ({
-            ...collection,
-            itemIds: [],
-          }))
-        );
         setActiveCollection('all');
-        showToast('Your Shelf has been cleared');
+        showToast(
+          'All Saved cleared. Collections unchanged.'
+        );
       },
     });
   }
@@ -905,7 +2052,7 @@ export default function MediaShelfApp({
   function createCollection() {
     const name = newCollectionName.trim();
 
-    if (!name) {
+    if (!validateCollectionName(name)) {
       return;
     }
 
@@ -913,11 +2060,121 @@ export default function MediaShelfApp({
       id: crypto.randomUUID(),
       name,
       itemIds: [],
+      items: [],
     };
 
     persistCollections([...collections, collection]);
     setNewCollectionName('');
     setActiveCollection(collection.id);
+    window.sessionStorage.setItem(
+      OPEN_COLLECTION_KEY,
+      collection.id
+    );
+    showToast(`Collection created: ${name}`);
+  }
+
+  // ADD ALL SAVED TO NEW COLLECTION
+  // FINAL SHELF FUNCTION FIX
+  // SHELF UX CLEANUP 2026-08-26
+  function createCollectionWithAllSaved() {
+    const name = newCollectionName.trim();
+
+    if (!validateCollectionName(name)) {
+      return;
+    }
+
+    const activeItems =
+      activeCollection === 'all'
+        ? favourites
+        : collections.find(
+            (collection) => collection.id === activeCollection
+          )?.items ?? [];
+
+    const selectedIds = new Set(selectedShelfIds);
+    const sourceItems =
+      selectedIds.size > 0
+        ? activeItems.filter((item) =>
+            selectedIds.has(item.id)
+          )
+        : activeItems;
+
+    if (sourceItems.length === 0) {
+      showToast('There are no items here to copy');
+      return;
+    }
+
+    const collection: ShelfCollection = {
+      id: crypto.randomUUID(),
+      name,
+      itemIds: sourceItems.map((item) => item.id),
+      items: sourceItems,
+    };
+
+    persistCollections([...collections, collection]);
+    setNewCollectionName('');
+    setShelfCountry('all');
+    setSelectedShelfIds(new Set());
+    setActiveCollection(collection.id);
+
+    window.sessionStorage.setItem(
+      OPEN_COLLECTION_KEY,
+      collection.id
+    );
+
+    showToast(
+      `Collection created: ${name} - ${sourceItems.length} item${
+        sourceItems.length === 1 ? '' : 's'
+      } copied`
+    );
+  }
+
+  function startRenameCollection() {
+    if (activeCollection === 'all') {
+      return;
+    }
+
+    const collection = collections.find(
+      (item) => item.id === activeCollection
+    );
+
+    if (!collection) {
+      return;
+    }
+
+    setRenameCollectionName(collection.name);
+    setRenamingCollection(true);
+  }
+
+  function cancelRenameCollection() {
+    setRenamingCollection(false);
+    setRenameCollectionName('');
+  }
+
+  function renameActiveCollection() {
+    if (activeCollection === 'all') {
+      return;
+    }
+
+    const name = renameCollectionName.trim();
+
+    if (!validateCollectionName(name, activeCollection)) {
+      return;
+    }
+
+    persistCollections(
+      collections.map((collection) =>
+        collection.id === activeCollection
+          ? {
+              ...collection,
+              name,
+            }
+          : collection
+      )
+    );
+
+    setRenamingCollection(false);
+    setRenameCollectionName('');
+    showToast(`Collection renamed: ${name}`);
   }
 
   function deleteCollection() {
@@ -953,6 +2210,12 @@ export default function MediaShelfApp({
       return;
     }
 
+    const sourceItem =
+      favourites.find((item) => item.id === itemId) ??
+      collections
+        .flatMap((collection) => collection.items ?? [])
+        .find((item) => item.id === itemId);
+
     persistCollections(
       collections.map((collection) =>
         collection.id === collectionId
@@ -961,11 +2224,70 @@ export default function MediaShelfApp({
               itemIds: Array.from(
                 new Set([...collection.itemIds, itemId])
               ),
+              items: sourceItem
+                ? mergeUniqueResults(
+                    collection.items ?? [],
+                    [sourceItem]
+                  )
+                : collection.items ?? [],
             }
           : collection
       )
     );
     showToast('Added to collection');
+  }
+
+  function addSelectedShelfItemsToCollection(
+    collectionId: string
+  ) {
+    if (!collectionId || selectedShelfIds.size === 0) {
+      return;
+    }
+
+    const targetCollection = collections.find(
+      (collection) => collection.id === collectionId
+    );
+
+    if (!targetCollection) {
+      showToast('Choose a collection first');
+      return;
+    }
+
+    const selectedIds = new Set(selectedShelfIds);
+    const sourceItems = activeShelfItems.filter((item) =>
+      selectedIds.has(item.id)
+    );
+
+    if (sourceItems.length === 0) {
+      showToast('No selected items available to add');
+      return;
+    }
+
+    persistCollections(
+      collections.map((collection) =>
+        collection.id === collectionId
+          ? {
+              ...collection,
+              itemIds: Array.from(
+                new Set([
+                  ...collection.itemIds,
+                  ...sourceItems.map((item) => item.id),
+                ])
+              ),
+              items: mergeUniqueResults(
+                collection.items ?? [],
+                sourceItems
+              ),
+            }
+          : collection
+      )
+    );
+
+    showToast(
+      `Added ${sourceItems.length} item${
+        sourceItems.length === 1 ? '' : 's'
+      } to ${targetCollection.name}`
+    );
   }
 
   function removeFromActiveCollection(itemId: string) {
@@ -981,10 +2303,400 @@ export default function MediaShelfApp({
               itemIds: collection.itemIds.filter(
                 (id) => id !== itemId
               ),
+              items: (collection.items ?? []).filter(
+                (item) => item.id !== itemId
+              ),
             }
           : collection
       )
     );
+    showToast('Removed from this collection only');
+  }
+
+  // P0 SHARED COLLECTION PREVIEW
+  function closeSharedCollectionPreview() {
+    setSharedCollectionPreview(null);
+    setSharedCollectionError('');
+    window.history.replaceState(
+      null,
+      '',
+      `${window.location.pathname}${window.location.search}`
+    );
+  }
+
+  function importSharedCollection() {
+    if (!sharedCollectionPreview) {
+      return;
+    }
+
+    const importedCollectionId =
+      `shared:${sharedCollectionPreview.collectionId}`;
+    const existingCollection = collections.find(
+      (collection) => collection.id === importedCollectionId
+    );
+    const importedName =
+      existingCollection?.name ?? sharedCollectionPreview.name.trim();
+
+    if (!validateCollectionName(importedName, importedCollectionId)) {
+      return;
+    }
+
+    const importedCollection: ShelfCollection = {
+      id: importedCollectionId,
+      name: importedName,
+      itemIds: sharedCollectionPreview.items.map((item) => item.id),
+      items: sharedCollectionPreview.items,
+    };
+
+    const nextCollections = existingCollection
+      ? collections.map((collection) =>
+          collection.id === importedCollectionId
+            ? importedCollection
+            : collection
+        )
+      : [...collections, importedCollection];
+
+    persistCollections(nextCollections);
+    setActiveCollection(importedCollectionId);
+    setShelfCountry('all');
+    setSelectedShelfIds(new Set());
+    window.sessionStorage.setItem(
+      OPEN_COLLECTION_KEY,
+      importedCollectionId
+    );
+    closeSharedCollectionPreview();
+    showToast(
+      `Collection added: ${importedName}`
+    );
+  }
+
+  // RESTORE MISSING COLLECTION FUNCTIONS
+  // EMAIL MODAL + RELATED RESULTS
+  function emailActiveCollection() {
+    const collection =
+      activeCollection === 'all'
+        ? null
+        : collections.find(
+            (item) => item.id === activeCollection
+          );
+
+    if (!collection) {
+      showToast('Select a collection first');
+      return;
+    }
+
+    const allowed = new Set(collection.itemIds);
+    const items = Array.isArray(collection.items)
+      ? collection.items
+      : favourites.filter((item) => allowed.has(item.id));
+
+    if (!items.length) {
+      showToast('Add items before emailing this collection');
+      return;
+    }
+
+    if (items.length > MAX_SHARED_COLLECTION_ITEMS) {
+      showToast(
+        `This collection is too large to share by link. Keep it to ${MAX_SHARED_COLLECTION_ITEMS} items or fewer.`
+      );
+      return;
+    }
+
+    const payload: SharedCollectionPayload = {
+      version: 1,
+      collectionId: collection.id,
+      name: collection.name,
+      items,
+    };
+
+    const shareUrl =
+      `${window.location.origin}/shelf#collection=` +
+      encodeSharedCollection(payload);
+
+    setEmailTo('');
+    setEmailSubject(`MediaShelf collection: ${collection.name}`);
+    setEmailMessage(
+      `I thought you might like this MediaShelf collection: ${collection.name}.`
+    );
+    setEmailShareUrl(shareUrl);
+    setEmailCollectionItems(items);
+    setEmailModalOpen(true);
+  }
+
+  function submitCollectionEmail() {
+    const collection =
+      activeCollection === 'all'
+        ? null
+        : collections.find(
+            (item) => item.id === activeCollection
+          );
+
+    const collectionName =
+      collection?.name ?? 'MediaShelf collection';
+
+    const lines = emailCollectionItems.flatMap(
+      (item, index) => [
+        `${index + 1}. ${item.title}`,
+        `   ${item.artist}`,
+        `   ${formatKind(item.kind)} - ${storefrontLabel(
+          item.storefront
+        )}`,
+        item.sourceUrl ? `   ${item.sourceUrl}` : '',
+        '',
+      ]
+    );
+
+    const body = [
+      emailMessage.trim(),
+      '',
+      `Open ${collectionName} in MediaShelf:`,
+      emailShareUrl,
+      '',
+      ...lines,
+      'Sent from MediaShelf',
+    ].join('\n');
+
+    const recipient = emailTo.trim();
+
+    window.location.href =
+      `mailto:${encodeURIComponent(recipient)}` +
+      `?subject=${encodeURIComponent(emailSubject.trim())}` +
+      `&body=${encodeURIComponent(body)}`;
+
+    setEmailModalOpen(false);
+  }
+
+  async function addHomeCollectionToShelf(
+    collection: (typeof HOME_COLLECTION_POOL)[number]
+  ) {
+    if (addingHomeCollection) {
+      return;
+    }
+
+    const nextStorefront = storefront;
+    const collectionId = `home:${collection.id}`;
+    const existingCollection = collections.find(
+      (item) => item.id === collectionId
+    );
+    const collectionName =
+      existingCollection?.name ?? collection.title;
+
+    if (!validateCollectionName(collectionName, collectionId)) {
+      return;
+    }
+
+    setAddingHomeCollection(collection.id);
+
+    try {
+      const discoveryItems = await buildMixedCollection({
+        searchTerms: readyMadeCollectionTerms(
+          collection.title,
+          collection.term
+        ),
+        media: collection.media,
+        storefront: nextStorefront,
+        maxItems: 18,
+      });
+
+      if (!discoveryItems.length) {
+        showToast('No items found for this collection');
+        return;
+      }
+
+      const shelfItems = discoveryItems.slice(0, 12);
+      const shelfIds = new Set(shelfItems.map((item) => item.id));
+      const relatedItems = discoveryItems.filter(
+        (item) => !shelfIds.has(item.id)
+      );
+      const relatedForResults =
+        relatedItems.length > 0
+          ? relatedItems
+          : discoveryItems.slice(Math.min(6, discoveryItems.length));
+
+      const shelfCollection: ShelfCollection = {
+        id: collectionId,
+        name: collectionName,
+        itemIds: shelfItems.map((item) => item.id),
+        items: shelfItems,
+      };
+
+      const nextCollections = collections.some(
+        (item) => item.id === collectionId
+      )
+        ? collections.map((item) =>
+            item.id === collectionId
+              ? shelfCollection
+              : item
+          )
+        : [...collections, shelfCollection];
+
+      persistCollections(nextCollections);
+      setActiveCollection(collectionId);
+      setShelfCountry('all');
+      setSelectedShelfIds(new Set());
+
+      setTerm(collection.title);
+      setMedia(collection.media);
+      setStorefront(nextStorefront);
+      setResults(shelfItems);
+      setVisibleCount(16);
+      setSort('relevance');
+
+      persistPrefs({
+        term: collection.title,
+        media: collection.media,
+        storefront: nextStorefront,
+        sort: 'relevance',
+      });
+      persistSnapshot(shelfItems, null, {
+        term: collection.title,
+        media: collection.media,
+        storefront: nextStorefront,
+      });
+      persistThemeDiscovery(collection.title, relatedForResults);
+
+      window.sessionStorage.setItem(
+        OPEN_COLLECTION_KEY,
+        collectionId
+      );
+
+      showToast(
+        `Collection added: ${collectionName}. Related results are ready.`
+      );
+    } catch (collectionError) {
+      showToast(
+        collectionError instanceof Error
+          ? collectionError.message
+          : 'Could not add collection'
+      );
+    } finally {
+      setAddingHomeCollection('');
+    }
+  }
+
+  async function addResultsAsCollection() {
+    if (addingResultCollection || results.length === 0) {
+      return;
+    }
+
+    const nextStorefront = storefront;
+    const baseItems = results.slice(0, 6);
+
+    const genres = Array.from(
+      new Set(
+        results
+          .map((item) => item.genre)
+          .filter(Boolean)
+      )
+    ).slice(0, 2);
+
+    const artists = Array.from(
+      new Set(
+        results
+          .map((item) => item.artist)
+          .filter(
+            (value) =>
+              value &&
+              value !== 'Unknown artist'
+          )
+      )
+    ).slice(0, 2);
+
+    const relatedTerms = [...genres, ...artists];
+
+    if (relatedTerms.length === 0 && term.trim()) {
+      relatedTerms.push(term.trim());
+    }
+
+    const cleanTerm = term.trim() || 'Results';
+    const generatedSuffix = ' Mix';
+    const generatedName =
+      `${cleanTerm
+        .slice(
+          0,
+          COLLECTION_NAME_MAX_LENGTH - generatedSuffix.length
+        )
+        .trimEnd()}${generatedSuffix}`;
+    const collectionId = [
+      'results',
+      cleanTerm.toLowerCase(),
+      media,
+      nextStorefront,
+    ].join(':');
+    const existingCollection = collections.find(
+      (item) => item.id === collectionId
+    );
+    const collectionName =
+      existingCollection?.name ?? generatedName;
+
+    if (!validateCollectionName(collectionName, collectionId)) {
+      return;
+    }
+
+    setAddingResultCollection(true);
+
+    try {
+      const items = await buildMixedCollection({
+        seedItems: baseItems,
+        searchTerms: relatedTerms,
+        media,
+        storefront: nextStorefront,
+        maxItems: 12,
+      });
+
+      if (!items.length) {
+        showToast('No results available for this collection');
+        return;
+      }
+
+      const currentResultIds = new Set(
+        baseItems.map((item) => item.id)
+      );
+      const relatedItems = items.filter(
+        (item) => !currentResultIds.has(item.id)
+      );
+
+      const relatedForResults =
+        relatedItems.length > 0
+          ? relatedItems
+          : items.slice(Math.min(6, items.length));
+
+      persistThemeDiscovery(
+        collectionName,
+        relatedForResults
+      );
+
+      const shelfCollection: ShelfCollection = {
+        id: collectionId,
+        name: collectionName,
+        itemIds: items.map((item) => item.id),
+        items,
+      };
+
+      const nextCollections = collections.some(
+        (item) => item.id === collectionId
+      )
+        ? collections.map((item) =>
+            item.id === collectionId
+              ? shelfCollection
+              : item
+          )
+        : [...collections, shelfCollection];
+
+      persistCollections(nextCollections);
+      setActiveCollection(collectionId);
+      setShelfCountry('all');
+      setSelectedShelfIds(new Set());
+
+      window.sessionStorage.setItem(
+        OPEN_COLLECTION_KEY,
+        collectionId
+      );
+
+      showToast(`Collection added: ${collectionName}`);
+    } finally {
+      setAddingResultCollection(false);
+    }
   }
 
   function runRecent(search: RecentSearch) {
@@ -1021,37 +2733,43 @@ export default function MediaShelfApp({
 
   const visibleResults = sortedResults.slice(0, visibleCount);
 
-  const filteredShelf = (() => {
-    let items = favourites;
-
-    if (activeCollection !== 'all') {
-      const collection = collections.find(
-        (item) => item.id === activeCollection
-      );
-
-      if (collection) {
-        const allowed = new Set(collection.itemIds);
-        items = items.filter((item) => allowed.has(item.id));
-      }
+  const activeShelfItems = (() => {
+    if (activeCollection === 'all') {
+      return favourites;
     }
 
-    if (shelfCountry !== 'all') {
-      items = items.filter(
-        (item) => item.storefront === shelfCountry
-      );
+    const collection = collections.find(
+      (item) => item.id === activeCollection
+    );
+
+    if (!collection) {
+      return [];
     }
 
-    return items;
+    if (Array.isArray(collection.items)) {
+      return collection.items;
+    }
+
+    const allowed = new Set(collection.itemIds);
+
+    return favourites.filter((item) => allowed.has(item.id));
   })();
+
+  const filteredShelf =
+    shelfCountry === 'all'
+      ? activeShelfItems
+      : activeShelfItems.filter(
+          (item) => item.storefront === shelfCountry
+        );
 
   const shelfCountries = Array.from(
     new Set(
-      favourites
+      activeShelfItems
         .map((item) => item.storefront)
         .filter(Boolean)
     )
   ).sort((a, b) =>
-    storefrontLabel(a).localeCompare(storefrontLabel(b))
+    shelfSearchLabel(a).localeCompare(shelfSearchLabel(b))
   );
 
   const allFilteredSelected =
@@ -1071,7 +2789,7 @@ export default function MediaShelfApp({
     }
 
     return Array.from(groups.entries()).sort(([a], [b]) =>
-      storefrontLabel(a).localeCompare(storefrontLabel(b))
+      shelfSearchLabel(a).localeCompare(shelfSearchLabel(b))
     );
   })();
 
@@ -1087,6 +2805,14 @@ export default function MediaShelfApp({
           (scan.completedCodes.length / scan.total) * 100
         )
       : 0;
+
+  const currentScanStorefront =
+    scan && !scan.complete
+      ? orderedGlobalStorefronts('za').find(
+          (country) =>
+            !scan.completedCodes.includes(country.code)
+        )
+      : null;
 
   const navItems: Array<{
     id: RouteView;
@@ -1249,7 +2975,7 @@ export default function MediaShelfApp({
                     value={term}
                     placeholder="Search music, films, podcasts..."
                     autoComplete="off"
-                    autoCapitalize="words"
+                    autoCapitalize="none"
                     maxLength={200}
                     onChange={(event) =>
                       handleTermChange(event.target.value)
@@ -1324,21 +3050,49 @@ export default function MediaShelfApp({
                   ? scan &&
                     !scan.complete &&
                     scan.completedCodes.length > 0
-                    ? 'Restart global scan'
-                    : 'Search all countries'
+                    ? 'Restart Global Scan'
+                    : 'Start Global Scan'
                   : searching
                     ? 'Searching...'
                     : 'Search'}
               </button>
             </form>
 
+            <div className={styles.searchUtilities}>
+              <button
+                type="button"
+                className={`${styles.secondaryButton} ${styles.surpriseButton}`}
+                data-surprise-me="true"
+                onClick={surpriseMe}
+              >
+                Surprise me
+              </button>
+
+              <button
+                type="button"
+                className={styles.secondaryButton}
+                data-reset-filters="true"
+                onClick={resetSearchExperience}
+              >
+                Reset search
+              </button>
+              <span>
+                Reset clears the current search without changing Recent Searches.
+                {storefront === ALL_COUNTRIES
+                  ? ' Quick global discovery uses multiple storefronts.'
+                  : ''}
+              </span>
+            </div>
+
             {storefront === ALL_COUNTRIES && (
-              <p className={styles.globalNote}>
-                Full Apple-storefront scan. Requests are
-                deliberately rate-limited because Apple documents
-                an approximate 20-call-per-minute Search API
-                limit. A complete scan can take several minutes.
-              </p>
+              <div className={styles.globalScanNotice}>
+                <strong>All Countries · Global catalogue scan</strong>
+                <span>
+                  Progressive, rate-safe and resumable. Apple
+                  storefront requests are deliberately rate-limited,
+                  so a complete scan can take several minutes.
+                </span>
+              </div>
             )}
 
             <div className={styles.browseRow}>
@@ -1355,6 +3109,7 @@ export default function MediaShelfApp({
                   <button
                     key={item.value}
                     type="button"
+                    data-media={item.value}
                     className={
                       media === item.value
                         ? styles.activeChip
@@ -1371,41 +3126,120 @@ export default function MediaShelfApp({
               </div>
             </div>
 
+            {homeCollections.length > 0 && (
+              <section
+                className={styles.homeCollections}
+                aria-labelledby="ready-made-collections-title"
+              >
+                <div className={styles.homeCollectionsHeading}>
+                  <div>
+                    <p className={styles.eyebrow}>Discover</p>
+                    <h2 id="ready-made-collections-title">
+                      Ready-made collections
+                    </h2>
+                  </div>
+                  <span>
+                    Random picks for this visit
+                    {storefront === ALL_COUNTRIES
+                      ? ' · quick global discovery'
+                      : ''}
+                  </span>
+                </div>
+
+                <div className={styles.homeCollectionGrid}>
+                  {homeCollections.map((collection) => (
+                    <button
+                      key={collection.id}
+                      type="button"
+                      data-media={collection.media}
+                      className={styles.homeCollectionCard}
+                      disabled={Boolean(addingHomeCollection)}
+                      data-adding={
+                        addingHomeCollection === collection.id
+                      }
+                      onClick={() =>
+                        void addHomeCollectionToShelf(collection)
+                      }
+                    >
+                      <span
+                        className={styles.homeCollectionType}
+                        data-media={collection.media}
+                      >
+                        {mediaLabel(collection.media)}
+                      </span>
+                      <strong>{collection.title}</strong>
+                      <small>{collection.description}</small>
+                      <span className={styles.homeCollectionAction}>
+                        {addingHomeCollection === collection.id
+                          ? 'Adding...'
+                          : 'Add to Your Shelf'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+
             {recent.length > 0 && (
               <aside
                 className={styles.recentBlock}
                 aria-labelledby="recent-searches-title"
               >
                 <div className={styles.recentHeading}>
-                  <span id="recent-searches-title">
-                    <span className={styles.recentHeadingIcon}>
-                      <HugeiconsIcon
-                        icon={HistoryIcon}
-                        size={17}
-                        aria-hidden="true"
-                      />
+                  <div className={styles.recentHeadingCopy}>
+                    <span id="recent-searches-title">
+                      <span className={styles.recentHeadingIcon}>
+                        <HugeiconsIcon
+                          icon={HistoryIcon}
+                          size={17}
+                          aria-hidden="true"
+                        />
+                      </span>
+                      Recent searches
                     </span>
-                    Recent searches
-                  </span>
-                  <small>Choose a highlighted search to run it again</small>
+                    <small>Choose a highlighted search to run it again</small>
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.recentClearButton}
+                    data-clear-recent
+                    onClick={clearRecentSearches}
+                  >
+                    Clear recent searches
+                  </button>
                 </div>
                 <div className={styles.recentList}>
                   {recent.map((item) => (
-                    <button
+                    <div
+                      className={styles.recentItem}
+                      data-media={item.media}
                       key={`${item.term}-${item.media}-${item.storefront}`}
-                      type="button"
-                      onClick={() => runRecent(item)}
                     >
-                      <strong>{item.term}</strong>
-                      <span className={styles.recentMeta}>
-                        <span data-media={item.media}>
-                          {mediaLabel(item.media)}
+                      <button
+                        className={styles.recentRunButton}
+                        type="button"
+                        onClick={() => runRecent(item)}
+                      >
+                        <strong>{item.term}</strong>
+                        <span className={styles.recentMeta}>
+                          <span data-media={item.media}>
+                            {mediaLabel(item.media)}
+                          </span>
+                          <span>
+                            {storefrontLabel(item.storefront)}
+                          </span>
                         </span>
-                        <span>
-                          {storefrontLabel(item.storefront)}
-                        </span>
-                      </span>
-                    </button>
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.recentRemoveButton}
+                        data-remove-recent
+                        aria-label={`Remove recent search ${item.term}`}
+                        onClick={() => removeRecent(item)}
+                      >
+                        Remove
+                      </button>
+                    </div>
                   ))}
                 </div>
               </aside>
@@ -1423,16 +3257,42 @@ export default function MediaShelfApp({
             <div className={styles.sectionHeading}>
               <div>
                 <p className={styles.eyebrow}>Discover</p>
-                <h1 id="results-title">Results</h1>
+                <h1 id="results-title">
+                  Results{term.trim() ? ` — ${term.trim()}` : ''}
+                </h1>
                 <p className={styles.sectionMeta}>
                   {results.length} result
                   {results.length === 1 ? '' : 's'} ·{' '}
                   {mediaLabel(media)} ·{' '}
                   {storefrontLabel(storefront)}
                 </p>
+                {relatedCollectionTitle && (
+                  <span
+                    className={styles.resultsThemeBadge}
+                    data-media={media}
+                  >
+                    Theme: {relatedCollectionTitle}
+                  </span>
+                )}
               </div>
 
               <div className={styles.toolbar}>
+                {results.length > 0 && (
+                  <button
+                    type="button"
+                    className={styles.addResultsCollectionButton}
+                    data-media={media}
+                    disabled={addingResultCollection}
+                    onClick={() =>
+                      void addResultsAsCollection()
+                    }
+                  >
+                    {addingResultCollection
+                      ? 'Building collection...'
+                      : 'Add collection to Shelf'}
+                  </button>
+                )}
+
                 <label>
                   <span className={styles.srOnly}>
                     Sort results
@@ -1493,16 +3353,66 @@ export default function MediaShelfApp({
               </div>
             </div>
 
+            <div
+              className={styles.resultsCollectionTools}
+              aria-label="Result collection tools"
+            >
+              <div>
+                <strong>Collections</strong>
+                <span>
+                  Create a collection here, then save any saved result into it.
+                  {storefront === ALL_COUNTRIES
+                    ? ' Quick global discovery uses multiple storefronts.'
+                    : ''}
+                </span>
+              </div>
+              <label
+                className={styles.srOnly}
+                htmlFor="results-new-collection-name"
+              >
+                New collection name
+              </label>
+              <input
+                id="results-new-collection-name"
+                value={newCollectionName}
+                placeholder="New collection"
+                maxLength={COLLECTION_NAME_MAX_LENGTH}
+                onChange={(event) =>
+                  setNewCollectionName(event.target.value)
+                }
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    createCollection();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                data-create-collection
+                onClick={createCollection}
+                disabled={!newCollectionName.trim()}
+              >
+                Create collection
+              </button>
+            </div>
+
             {scan && (
               <div className={styles.scanPanel}>
                 <div className={styles.scanHeader}>
                   <div>
-                    <strong>All Countries</strong>
-                    <span>
+                    <strong>All Countries · Global Scan</strong>
+                    <span className={styles.scanProgressText}>
                       {scan.completedCodes.length} of {scan.total}{' '}
-                      Apple storefronts scanned · {results.length}{' '}
+                      storefronts · {results.length}{' '}
                       unique results retained
                     </span>
+                    {currentScanStorefront && (
+                      <small className={styles.scanCurrentStorefront}>
+                        {searching ? 'Scanning next' : 'Next storefront'}:{' '}
+                        {storefrontLabel(currentScanStorefront.code)}
+                      </small>
+                    )}
                   </div>
                   <div className={styles.scanActions}>
                     {searching ? (
@@ -1537,9 +3447,10 @@ export default function MediaShelfApp({
                   aria-label="Global search progress"
                 />
                 <small>
-                  Rate-safe progressive search. Up to{' '}
-                  {GLOBAL_RESULT_LIMIT} unique results are retained
-                  in the browser session.
+                  Progressive, rate-safe and resumable. Pause at any
+                  time and Resume from the retained storefront and
+                  result progress. Up to {GLOBAL_RESULT_LIMIT} unique
+                  results are retained in this browser session.
                 </small>
               </div>
             )}
@@ -1550,9 +3461,30 @@ export default function MediaShelfApp({
               </div>
             )}
 
+            {/* P1.3 + P1.4 + P1.6 2026-08-26 */}
             {!hydrated ? (
               <div className={styles.emptyState}>
-                <strong>Loading MediaShelf...</strong>
+                <strong>No search yet</strong>
+                <span>
+                  Search for music, films, podcasts and more.
+                </span>
+                <div className={styles.emptyStateActions}>
+                  <button
+                    type="button"
+                    className={styles.secondaryButton}
+                    onClick={() => navigateTo('search')}
+                  >
+                    Back to Search
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.secondaryButton} ${styles.surpriseButton}`}
+                    data-surprise-me-empty-results="true"
+                    onClick={surpriseMe}
+                  >
+                    Surprise me
+                  </button>
+                </div>
               </div>
             ) : searching && results.length === 0 ? (
               <div className={styles.emptyState}>
@@ -1564,10 +3496,33 @@ export default function MediaShelfApp({
               </div>
             ) : results.length === 0 ? (
               <div className={styles.emptyState}>
-                <strong>Your results will appear here.</strong>
+                <strong>
+                  {term.trim() ? 'No results found.' : 'No search yet'}
+                </strong>
                 <span>
-                  Start with a title, artist, film, show or podcast.
+                  {term.trim()
+                    ? 'Try another search or adjust the current filters.'
+                    : 'Search for music, films, podcasts and more.'}
                 </span>
+                {!term.trim() && (
+                  <div className={styles.emptyStateActions}>
+                    <button
+                      type="button"
+                      className={styles.secondaryButton}
+                      onClick={() => navigateTo('search')}
+                    >
+                      Back to Search
+                    </button>
+                    <button
+                      type="button"
+                      className={`${styles.secondaryButton} ${styles.surpriseButton}`}
+                      data-surprise-me-empty-results="true"
+                      onClick={surpriseMe}
+                    >
+                      Surprise me
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <>
@@ -1629,6 +3584,7 @@ export default function MediaShelfApp({
                     return (
                       <article
                         className={styles.resultCard}
+                        data-media={mediaIdentityForKind(item.kind)}
                         key={item.id}
                       >
                         <div className={styles.artworkWrap}>
@@ -1655,9 +3611,15 @@ export default function MediaShelfApp({
                           <span
                             className={styles.kind}
                             data-kind={item.kind}
+                            data-media={mediaIdentityForKind(item.kind)}
                           >
                             {formatKind(item.kind)}
                           </span>
+                          {appleStorefrontMeta(item) && (
+                            <small className={styles.storefrontMeta}>
+                              {appleStorefrontMeta(item)}
+                            </small>
+                          )}
                           <h3>{item.title}</h3>
                           <p>{item.artist}</p>
                           {item.genre && (
@@ -1699,11 +3661,155 @@ export default function MediaShelfApp({
                               </a>
                             )}
                           </div>
+
+                          {saved && (
+                            <label className={styles.resultCollectionControl}>
+                              <span>Save to collection</span>
+                              <select
+                                defaultValue=""
+                                data-result-collection-select
+                                aria-label={`Save ${item.title} to collection`}
+                                disabled={collections.length === 0}
+                                onChange={(event) => {
+                                  addToCollection(
+                                    item.id,
+                                    event.target.value
+                                  );
+                                  event.target.value = '';
+                                }}
+                              >
+                                <option value="">
+                                  {collections.length > 0
+                                    ? 'Choose collection'
+                                    : 'Create a collection first'}
+                                </option>
+                                {collections.map((collection) => (
+                                  <option
+                                    key={collection.id}
+                                    value={collection.id}
+                                  >
+                                    {collection.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          )}
                         </div>
                       </article>
                     );
                   })}
                 </div>
+
+                {relatedCollectionResults.length > 0 && (
+                  <section
+                    className={styles.relatedResultsPanel}
+                    aria-labelledby="related-collection-title"
+                  >
+                    <div className={styles.relatedResultsHeading}>
+                      <div>
+                        <p className={styles.eyebrow}>
+                          More to discover
+                        </p>
+                        <h2 id="related-collection-title">
+                          Related to {relatedCollectionTitle}
+                        </h2>
+                        <p>
+                          Similar picks discovered while building
+                          this collection. Your existing Collections
+                          controls above are unchanged.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className={styles.relatedResultsGrid}>
+                      {relatedCollectionResults.map((item) => {
+                        const saved = favourites.some(
+                          (entry) => entry.id === item.id
+                        );
+
+                        return (
+                          <article
+                            key={`related-${item.id}`}
+                            className={styles.relatedResultCard}
+                            data-media={mediaIdentityForKind(item.kind)}
+                          >
+                            {item.artworkUrl ? (
+                              <img
+                                src={appleArtwork(
+                                  item.artworkUrl,
+                                  300
+                                )}
+                                alt=""
+                                loading="lazy"
+                              />
+                            ) : (
+                              <div
+                                className={
+                                  styles.relatedArtworkFallback
+                                }
+                                aria-hidden="true"
+                              >
+                                MediaShelf
+                              </div>
+                            )}
+
+                            <div
+                              className={
+                                styles.relatedResultCopy
+                              }
+                            >
+                              <span
+                                className={styles.kind}
+                                data-kind={item.kind}
+                                data-media={mediaIdentityForKind(item.kind)}
+                              >
+                                {formatKind(item.kind)}
+                              </span>
+                              <strong>{item.title}</strong>
+                              <span>{item.artist}</span>
+                              <small>
+                                Included in{' '}
+                                {relatedCollectionTitle}
+                              </small>
+                            </div>
+
+                            <div
+                              className={
+                                styles.relatedResultActions
+                              }
+                            >
+                              <button
+                                type="button"
+                                className={
+                                  saved
+                                    ? styles.savedButton
+                                    : ''
+                                }
+                                onClick={() =>
+                                  toggleFavourite(item)
+                                }
+                              >
+                                {saved
+                                  ? 'Saved'
+                                  : 'Save to Shelf'}
+                              </button>
+
+                              {item.sourceUrl && (
+                                <a
+                                  href={item.sourceUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  View
+                                </a>
+                              )}
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
 
                 {visibleCount < sortedResults.length && (
                   <div className={styles.loadMoreWrap}>
@@ -1736,11 +3842,14 @@ export default function MediaShelfApp({
                   Your collection
                 </p>
                 <h1 id="saved-title">Your Shelf</h1>
+                <p className={styles.shelfStorageNote}>
+                  Saved on this device
+                </p>
               </div>
 
               <div className={styles.shelfSummary}>
                 <span>
-                  {favourites.length} saved
+                  {favourites.length} in All Saved
                 </span>
                 {favourites.length > 0 && (
                   <button
@@ -1762,13 +3871,17 @@ export default function MediaShelfApp({
             >
               <button
                 type="button"
+                data-media="all"
                 className={
                   activeCollection === 'all'
                     ? styles.activeCollection
                     : ''
                 }
                 aria-pressed={activeCollection === 'all'}
-                onClick={() => setActiveCollection('all')}
+                onClick={() => {
+                  cancelRenameCollection();
+                  setActiveCollection('all');
+                }}
               >
                 All Saved
               </button>
@@ -1776,15 +3889,17 @@ export default function MediaShelfApp({
                 <button
                   key={collection.id}
                   type="button"
+                  data-media={collectionMediaIdentity(collection)}
                   className={
                     activeCollection === collection.id
                       ? styles.activeCollection
                       : ''
                   }
                   aria-pressed={activeCollection === collection.id}
-                  onClick={() =>
-                    setActiveCollection(collection.id)
-                  }
+                  onClick={() => {
+                    cancelRenameCollection();
+                    setActiveCollection(collection.id);
+                  }}
                 >
                   {collection.name}
                 </button>
@@ -1802,7 +3917,7 @@ export default function MediaShelfApp({
                 id="new-collection-name"
                 value={newCollectionName}
                 placeholder="New collection"
-                maxLength={60}
+                maxLength={COLLECTION_NAME_MAX_LENGTH}
                 onChange={(event) =>
                   setNewCollectionName(event.target.value)
                 }
@@ -1815,25 +3930,33 @@ export default function MediaShelfApp({
               />
               <button
                 type="button"
+                className={styles.createCollectionButton}
                 onClick={createCollection}
                 disabled={!newCollectionName.trim()}
               >
-                Create collection
+                Create empty
               </button>
-              {activeCollection !== 'all' && (
+              {activeShelfItems.length > 0 && (
                 <button
                   type="button"
-                  className={styles.deleteCollection}
-                  onClick={deleteCollection}
+                  className={styles.createAllCollectionButton}
+                  data-create-all-collection="true"
+                  onClick={createCollectionWithAllSaved}
+                  disabled={!newCollectionName.trim()}
                 >
-                  Delete collection
+                  {selectedShelfIds.size > 0
+                    ? `Create from ${selectedShelfIds.size} selected`
+                    : activeCollection === 'all'
+                      ? 'Create with All Saved'
+                      : 'Copy current collection'}
                 </button>
               )}
             </div>
 
+            {activeShelfItems.length > 0 && (
             <div className={styles.shelfBulkBar}>
               <label className={styles.shelfFilter}>
-                <span>Filter country</span>
+                <span>Filter search context</span>
                 <select
                   value={shelfCountry}
                   onChange={(event) => {
@@ -1841,10 +3964,10 @@ export default function MediaShelfApp({
                     setSelectedShelfIds(new Set());
                   }}
                 >
-                  <option value="all">All countries</option>
+                  <option value="all">All search contexts</option>
                   {shelfCountries.map((code) => (
                     <option key={code} value={code}>
-                      {storefrontLabel(code)}
+                      {shelfSearchLabel(code)}
                     </option>
                   ))}
                 </select>
@@ -1869,36 +3992,170 @@ export default function MediaShelfApp({
                 {selectedShelfIds.size} selected
               </span>
 
+              <label className={styles.bulkCollectionAction}>
+                <span className={styles.srOnly}>
+                  Add selected items to collection
+                </span>
+                <select
+                  className={styles.bulkCollectionSelect}
+                  defaultValue=""
+                  disabled={
+                    selectedShelfIds.size === 0 ||
+                    collections.every(
+                      (collection) =>
+                        collection.id === activeCollection
+                    )
+                  }
+                  aria-label="Add selected items to collection"
+                  onChange={(event) => {
+                    addSelectedShelfItemsToCollection(
+                      event.target.value
+                    );
+                    event.target.value = '';
+                  }}
+                >
+                  <option value="">
+                    {allFilteredSelected
+                      ? 'Add all to collection...'
+                      : 'Add selected to collection...'}
+                  </option>
+                  {collections
+                    .filter(
+                      (collection) =>
+                        collection.id !== activeCollection
+                    )
+                    .map((collection) => (
+                      <option
+                        key={collection.id}
+                        value={collection.id}
+                      >
+                        {collection.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+
               <button
                 type="button"
                 className={styles.deleteSelectedButton}
                 disabled={selectedShelfIds.size === 0}
                 onClick={deleteSelectedShelfItems}
               >
-                Delete selected
+                Remove selected
               </button>
             </div>
 
+            )}
             <div className={styles.shelfContext}>
-              <strong>{activeCollectionName}</strong>
-              <span>
-                {filteredShelf.length} item
-                {filteredShelf.length === 1 ? '' : 's'}
-              </span>
+              {renamingCollection &&
+              activeCollection !== 'all' ? (
+                <form
+                  className={styles.collectionRenameForm}
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    renameActiveCollection();
+                  }}
+                >
+                  <label
+                    className={styles.srOnly}
+                    htmlFor="rename-collection-name"
+                  >
+                    Rename collection
+                  </label>
+                  <input
+                    id="rename-collection-name"
+                    value={renameCollectionName}
+                    maxLength={COLLECTION_NAME_MAX_LENGTH}
+                    autoFocus
+                    onChange={(event) =>
+                      setRenameCollectionName(event.target.value)
+                    }
+                  />
+                  <button
+                    type="submit"
+                    className={styles.renameSaveButton}
+                    disabled={!renameCollectionName.trim()}
+                  >
+                    Save name
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.renameCancelButton}
+                    onClick={cancelRenameCollection}
+                  >
+                    Cancel
+                  </button>
+                </form>
+              ) : (
+                <div className={styles.shelfContextIdentity}>
+                  <strong>{activeCollectionName}</strong>
+                  <span>
+                    {filteredShelf.length} item
+                    {filteredShelf.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+              )}
+
+              {activeCollection !== 'all' &&
+                !renamingCollection && (
+                  <div className={styles.shelfContextActions}>
+                    <button
+                      type="button"
+                      className={styles.renameCollectionButton}
+                      onClick={startRenameCollection}
+                    >
+                      Rename
+                    </button>
+                    {activeShelfItems.length > 0 && (
+                      <button
+                        type="button"
+                        className={styles.emailCollectionButton}
+                        data-email-collection="true"
+                        onClick={emailActiveCollection}
+                      >
+                        Email collection
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className={styles.contextDeleteCollection}
+                      onClick={deleteCollection}
+                    >
+                      Delete collection
+                    </button>
+                  </div>
+                )}
             </div>
 
-            {filteredShelf.length === 0 ? (
+            {activeShelfItems.length === 0 ? (
               <div className={styles.emptyShelf}>
                 <HugeiconsIcon
                   icon={HeartIcon}
                   size={28}
                   aria-hidden="true"
                 />
-                <strong>Nothing saved here yet.</strong>
+                <strong>
+                  {activeCollection === 'all'
+                    ? 'Nothing saved here yet.'
+                    : 'This collection is empty.'}
+                </strong>
                 <span>
-                  Save media from the Results page, then organise
-                  it into collections.
+                  {activeCollection === 'all'
+                    ? 'Save media from Results or start with a ready-made collection.'
+                    : 'Save media from Results or add items from All Saved.'}
                 </span>
+                <button
+                  type="button"
+                  className={styles.secondaryButton}
+                  onClick={() => navigateTo('search')}
+                >
+                  Find media
+                </button>
+              </div>
+            ) : filteredShelf.length === 0 ? (
+              <div className={styles.emptyShelf}>
+                <strong>No items match this country filter.</strong>
+                <span>Choose another country or All countries.</span>
               </div>
             ) : (
               <div className={styles.shelfGroups}>
@@ -1906,7 +4163,7 @@ export default function MediaShelfApp({
                   <section
                     key={code}
                     className={styles.countryGroup}
-                    aria-label={storefrontLabel(code)}
+                    aria-label={`Search: ${shelfSearchLabel(code)}`}
                   >
                     <div className={styles.countryHeader}>
                       <div>
@@ -1915,12 +4172,19 @@ export default function MediaShelfApp({
                           aria-hidden="true"
                         />
                         <strong>
-                          {storefrontLabel(code)}
+                          Search: {shelfSearchLabel(code)}
                         </strong>
-                        <small>{code.toUpperCase()}</small>
+                        <small>
+                          {code === GLOBAL_SHELF_CONTEXT
+                            ? 'GLOBAL'
+                            : code.toUpperCase()}
+                        </small>
                       </div>
                       <span>
-                        {items.length} saved
+                        {items.length}{' '}
+                        {activeCollection === 'all'
+                          ? 'saved'
+                          : 'items'}
                       </span>
                     </div>
 
@@ -1929,6 +4193,7 @@ export default function MediaShelfApp({
                         <article
                           key={item.id}
                           className={styles.shelfItem}
+                          data-media={mediaIdentityForKind(item.kind)}
                           data-selected={selectedShelfIds.has(item.id)}
                         >
                           <label className={styles.shelfCheck}>
@@ -1963,13 +4228,18 @@ export default function MediaShelfApp({
                           <div className={styles.shelfItemCopy}>
                             <strong>{item.title}</strong>
                             <span>{item.artist}</span>
-                            <small>
+                            <small
+                              data-media={mediaIdentityForKind(item.kind)}
+                            >
                               {formatKind(item.kind)}
                             </small>
                           </div>
 
                           <div className={styles.shelfItemControls}>
-                            {collections.length > 0 && (
+                            {collections.some(
+                              (collection) =>
+                                collection.id !== activeCollection
+                            ) && (
                               <select
                                 defaultValue=""
                                 aria-label={`Add ${item.title} to collection`}
@@ -1984,8 +4254,13 @@ export default function MediaShelfApp({
                                 <option value="">
                                   Add to collection
                                 </option>
-                                {collections.map(
-                                  (collection) => (
+                                {collections
+                                  .filter(
+                                    (collection) =>
+                                      collection.id !==
+                                      activeCollection
+                                  )
+                                  .map((collection) => (
                                     <option
                                       key={collection.id}
                                       value={collection.id}
@@ -2010,6 +4285,7 @@ export default function MediaShelfApp({
                             {activeCollection !== 'all' && (
                               <button
                                 type="button"
+                                className={styles.removeFromCollectionButton}
                                 onClick={() =>
                                   removeFromActiveCollection(
                                     item.id
@@ -2020,14 +4296,29 @@ export default function MediaShelfApp({
                               </button>
                             )}
 
-                            <button
-                              type="button"
-                              onClick={() =>
-                                toggleFavourite(item)
-                              }
-                            >
-                              Remove
-                            </button>
+                            {activeCollection === 'all' ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  toggleFavourite(item)
+                                }
+                              >
+                                Remove
+                              </button>
+                            ) : (
+                              favourites.some(
+                                (saved) => saved.id === item.id
+                              ) && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    toggleFavourite(item)
+                                  }
+                                >
+                                  Remove from All Saved
+                                </button>
+                              )
+                            )}
                           </div>
                         </article>
                       ))}
@@ -2040,6 +4331,254 @@ export default function MediaShelfApp({
         </section>
 )}
       </main>
+
+      {(sharedCollectionPreview || sharedCollectionError) && (
+        <div
+          className={styles.sharedPreviewBackdrop}
+          role="presentation"
+        >
+          <section
+            ref={sharedPreviewDialogRef}
+            className={styles.sharedPreviewDialog}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="shared-collection-preview-title"
+            tabIndex={-1}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                closeSharedCollectionPreview();
+                return;
+              }
+
+              trapDialogFocus(event, event.currentTarget);
+            }}
+          >
+            <div className={styles.sharedPreviewHeading}>
+              <div>
+                <p className={styles.eyebrow}>
+                  Shared collection
+                </p>
+                <h2 id="shared-collection-preview-title">
+                  {sharedCollectionPreview
+                    ? sharedCollectionPreview.name
+                    : 'Unable to preview collection'}
+                </h2>
+                {sharedCollectionPreview && (
+                  <span>
+                    {sharedCollectionPreview.items.length} item
+                    {sharedCollectionPreview.items.length === 1
+                      ? ''
+                      : 's'}{' '}
+                    · preview only
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                data-dialog-initial-focus
+                className={styles.sharedPreviewClose}
+                aria-label="Close shared collection preview"
+                onClick={closeSharedCollectionPreview}
+              >
+                ×
+              </button>
+            </div>
+
+            {sharedCollectionError ? (
+              <div className={styles.sharedPreviewError}>
+                <strong>Collection link could not be opened.</strong>
+                <span>{sharedCollectionError}</span>
+                <span>
+                  Your existing Shelf has not been changed.
+                </span>
+              </div>
+            ) : (
+              <>
+                <div className={styles.sharedPreviewItems}>
+                  {sharedCollectionPreview?.items.map((item) => (
+                    <article
+                      key={`shared-preview-${item.id}`}
+                      className={styles.sharedPreviewItem}
+                      data-media={mediaIdentityForKind(item.kind)}
+                    >
+                      {item.artworkUrl ? (
+                        <img
+                          src={appleArtwork(item.artworkUrl, 180)}
+                          alt=""
+                        />
+                      ) : (
+                        <div
+                          className={styles.sharedPreviewArtworkFallback}
+                          aria-hidden="true"
+                        />
+                      )}
+                      <div>
+                        <span
+                          className={styles.kind}
+                          data-media={mediaIdentityForKind(item.kind)}
+                          data-kind={item.kind}
+                        >
+                          {formatKind(item.kind)}
+                        </span>
+                        <strong>{item.title}</strong>
+                        <small>{item.artist}</small>
+                      </div>
+                      {item.sourceUrl && (
+                        <a
+                          href={item.sourceUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          View Source
+                        </a>
+                      )}
+                    </article>
+                  ))}
+                </div>
+
+                <div className={styles.sharedPreviewActions}>
+                  <button
+                    type="button"
+                    className={styles.sharedPreviewCancel}
+                    onClick={closeSharedCollectionPreview}
+                  >
+                    Not now
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.sharedPreviewImport}
+                    onClick={importSharedCollection}
+                  >
+                    Add collection to My Shelf
+                  </button>
+                </div>
+              </>
+            )}
+          </section>
+        </div>
+      )}
+
+      {emailModalOpen && (
+        <div
+          className={styles.emailModalBackdrop}
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setEmailModalOpen(false);
+            }
+          }}
+        >
+          <section
+            ref={emailModalRef}
+            className={styles.emailModal}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="email-collection-title"
+            tabIndex={-1}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                setEmailModalOpen(false);
+                return;
+              }
+
+              trapDialogFocus(event, event.currentTarget);
+            }}
+          >
+            <div className={styles.emailModalHeading}>
+              <div>
+                <p className={styles.eyebrow}>
+                  Share collection
+                </p>
+                <h2 id="email-collection-title">
+                  Email collection
+                </h2>
+              </div>
+              <button
+                type="button"
+                className={styles.emailModalClose}
+                aria-label="Close email collection"
+                onClick={() => setEmailModalOpen(false)}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className={styles.emailModalFields}>
+              <label>
+                <span>To</span>
+                <input
+                  data-dialog-initial-focus
+                  type="email"
+                  value={emailTo}
+                  placeholder="name@example.com"
+                  autoComplete="email"
+                  onChange={(event) =>
+                    setEmailTo(event.target.value)
+                  }
+                />
+              </label>
+
+              <label>
+                <span>Subject</span>
+                <input
+                  type="text"
+                  value={emailSubject}
+                  maxLength={160}
+                  onChange={(event) =>
+                    setEmailSubject(event.target.value)
+                  }
+                />
+              </label>
+
+              <label>
+                <span>Message</span>
+                <textarea
+                  value={emailMessage}
+                  rows={4}
+                  maxLength={800}
+                  onChange={(event) =>
+                    setEmailMessage(event.target.value)
+                  }
+                />
+              </label>
+
+              <div className={styles.emailModalLinkPreview}>
+                <strong>Collection link included</strong>
+                <span>
+                  {emailCollectionItems.length} item
+                  {emailCollectionItems.length === 1
+                    ? ''
+                    : 's'}{' '}
+                  will be attached to the MediaShelf share link.
+                </span>
+              </div>
+            </div>
+
+            <div className={styles.emailModalActions}>
+              <button
+                type="button"
+                className={styles.emailModalCancel}
+                onClick={() => setEmailModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={styles.emailModalSend}
+                disabled={
+                  !emailTo.trim() ||
+                  !emailSubject.trim()
+                }
+                onClick={submitCollectionEmail}
+              >
+                Continue to email
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
 
       <footer className={styles.footer}>
         <div className={styles.footerInner}>
@@ -2063,15 +4602,21 @@ export default function MediaShelfApp({
       {confirmDialog && (
         <div className={styles.confirmOverlay}>
           <div
+            ref={confirmDialogRef}
             className={styles.confirmDialog}
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="mediashelf-confirm-title"
             aria-describedby="mediashelf-confirm-message"
+            tabIndex={-1}
             onKeyDown={(event) => {
               if (event.key === 'Escape') {
+                event.preventDefault();
                 setConfirmDialog(null);
+                return;
               }
+
+              trapDialogFocus(event, event.currentTarget);
             }}
           >
             <span className={styles.confirmEyebrow}>Please confirm</span>
@@ -2084,8 +4629,8 @@ export default function MediaShelfApp({
             <div className={styles.confirmActions}>
               <button
                 type="button"
+                data-dialog-initial-focus
                 className={styles.confirmCancelButton}
-                autoFocus
                 onClick={() => setConfirmDialog(null)}
               >
                 Cancel
@@ -2118,7 +4663,8 @@ export default function MediaShelfApp({
             <HugeiconsIcon
               icon={
                 toast.includes('Saved') ||
-                toast.includes('Added')
+                toast.includes('Added') ||
+                toast.startsWith('Collection created')
                   ? CheckmarkCircle02Icon
                   : HeartIcon
               }
@@ -2126,7 +4672,8 @@ export default function MediaShelfApp({
               aria-hidden="true"
             />
             <span>{toast}</span>
-            {toast.includes('Saved') && (
+            {(toast.includes('Saved') ||
+              toast.startsWith('Collection added')) && (
               <button
                 type="button"
                 onClick={() => navigateTo('saved')}
@@ -2134,24 +4681,49 @@ export default function MediaShelfApp({
                 View shelf
               </button>
             )}
+            {toast.startsWith('Collection created') && (
+              <button
+                type="button"
+                data-open-created-collection="true"
+                onClick={() => {
+                  setToast('');
+
+                  if (routeView === 'saved') {
+                    document
+                      .getElementById('saved')
+                      ?.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start',
+                      });
+                    return;
+                  }
+
+                  navigateTo('saved');
+                }}
+              >
+                Open collection
+              </button>
+            )}
           </div>
         )}
 
-      <button
-        type="button"
-        className={styles.backTop}
-        aria-label="Back to top"
-        title="Back to top"
-        onClick={() =>
-          window.scrollTo({ top: 0, behavior: 'auto' })
-        }
-      >
-        <HugeiconsIcon
-          icon={ArrowUp01Icon}
-          size={20}
-          aria-hidden="true"
-        />
-      </button>
+      {showBackTop && (
+        <button
+          type="button"
+          className={styles.backTop}
+          aria-label="Back to top"
+          title="Back to top"
+          onClick={() =>
+            window.scrollTo({ top: 0, behavior: 'auto' })
+          }
+        >
+          <HugeiconsIcon
+            icon={ArrowUp01Icon}
+            size={20}
+            aria-hidden="true"
+          />
+        </button>
+      )}
     </div>
   );
 }

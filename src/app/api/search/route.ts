@@ -42,12 +42,20 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const upstreamLimit = media === 'movie' ? 100 : limit;
+
   const params = new URLSearchParams({
     term,
-    media,
     country: storefront.toUpperCase(),
-    limit: String(limit),
+    limit: String(upstreamLimit),
+    media: media === 'movie' ? 'all' : media,
   });
+
+  // Apple's dedicated Movie search is currently returning false-empty
+  // responses for terms that do return kind="feature-movie" records through
+  // the all-media endpoint. Use one broader Apple request for Movie and
+  // filter locally so the client-facing MediaShelf value remains "movie"
+  // without doubling Apple requests.
 
   try {
     const response = await fetch(
@@ -77,10 +85,22 @@ export async function GET(request: NextRequest) {
       results?: unknown[];
     };
 
+    const appleResults = payload.results ?? [];
+    const mediaResults =
+      media === 'movie'
+        ? appleResults.filter((item) => {
+            if (!item || typeof item !== 'object') {
+              return false;
+            }
+
+            return (item as { kind?: unknown }).kind === 'feature-movie';
+          })
+        : appleResults;
+
     const normalized = normalizeItunesResults(
-      (payload.results ?? []) as never[],
+      mediaResults as never[],
       storefront
-    );
+    ).slice(0, limit);
 
     return NextResponse.json(
       {

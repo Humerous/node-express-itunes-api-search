@@ -5,28 +5,126 @@
 @import '@fontsource/poppins/600.css';
 
 :root {
-  --navy: #0D1424;
-  --indigo: #2C3E92;
-  --violet: #6C5CE7;
-  --coral: #FF6B4A;
-  --green: #22C55E;
-  --blue: #405CFF;
-  --cyan: #29C6FF;
-  --yellow: #E9DD27;
-  --orange: #FF9F16;
-  --red: #D92D20;
-  --canvas: #F1F5F9;
-  --surface: #FFFFFF;
-  --muted: #6E788B;
-  --line: #DDE3EC;
+  /* Primitive palette — current approved values, unchanged. */
+  --color-white: #FFFFFF;
+  --color-navy: #0D1424;
+  --color-navy-deep: #020611;
+  --color-navy-soft: #09142B;
+  --color-navy-hover: #111D38;
+  --color-indigo: #2C3E92;
+  --color-indigo-hover: #233578;
+  --color-violet: #6C5CE7;
+  --color-violet-hover: #7B6DF0;
+  --color-coral: #FF6B4A;
+  --color-green: #22C55E;
+  --color-blue: #405CFF;
+  --color-cyan: #29C6FF;
+  --color-yellow: #E9DD27;
+  --color-orange: #FF9F16;
+  --color-red: #D92D20;
+  --color-red-hover: #B42318;
+
+  /* Semantic product colours — aliases only; no palette change. */
+  --canvas: #F9FBFF;
+  --surface: var(--color-white);
+  --surface-soft: #F7F9FC;
+  --surface-raised: rgba(255, 255, 255, 0.92);
+  --surface-translucent: rgba(255, 255, 255, 0.78);
+
+  --text-primary: var(--color-navy);
+  --text-secondary: #6E788B;
+  --text-tertiary: #7C8597;
+  --text-control: #667085;
+  --text-control-strong: #687287;
+  --text-label: #737D90;
+  --text-subtle: #8A94A6;
+  --text-on-strong: var(--color-white);
+
+  --border: #DDE3EC;
+  --border-soft: #E2E6ED;
+  --border-muted: #DFE5ED;
   --control-border: #D9DEEA;
   --control-border-hover: #BFC7D8;
+
+  --brand-primary: var(--color-indigo);
+  --brand-secondary: var(--color-violet);
+  --brand-blue: var(--color-blue);
+  --brand-cyan: var(--color-cyan);
+
+  --success: var(--color-green);
+  --success-text: #166534;
+  --danger: var(--color-red);
+  --danger-hover: var(--color-red-hover);
+
+  /* Dark modal / preview surfaces — current values, unchanged. */
+  --dark-canvas: var(--color-navy-deep);
+  --dark-surface: var(--color-navy);
+  --dark-surface-soft: var(--color-navy-soft);
+  --dark-surface-hover: var(--color-navy-hover);
+  --dark-text: #F5F7FB;
+  --dark-text-secondary: #D7DEEB;
+  --dark-text-muted: #AEB9CC;
+  --dark-border: rgba(255, 255, 255, 0.10);
+  --dark-border-strong: rgba(255, 255, 255, 0.16);
+
+  /* Typography. */
+  --font-body: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-display: 'Poppins', sans-serif;
+
+  /* Controls. */
   --control-height: 48px;
   --control-height-small: 40px;
   --control-radius: 12px;
   --control-radius-small: 10px;
   --control-gap: 10px;
+
+  /* Radius scale. */
+  --radius-xs: 8px;
+  --radius-sm: 10px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 18px;
+  --radius-2xl: 20px;
+  --radius-pill: 999px;
+
+  /* Existing elevation, now named. */
+  --shadow-card: 0 4px 18px rgba(13, 20, 36, 0.055);
+  --shadow-card-hover: 0 8px 26px rgba(13, 20, 36, 0.08);
+  --shadow-soft: 0 8px 24px rgba(13, 20, 36, 0.05);
+  --shadow-floating: 0 18px 50px rgba(13, 20, 36, 0.18), 0 4px 14px rgba(13, 20, 36, 0.08);
+  --shadow-modal: 0 28px 80px rgba(2, 6, 17, 0.42), 0 2px 12px rgba(2, 6, 17, 0.24);
+
+  /* Focus. */
+  --focus-color: var(--color-violet);
+  --focus-ring-field: rgba(108, 92, 231, 0.14);
+  --focus-ring-control: rgba(108, 92, 231, 0.18);
+  --focus-outline: rgba(108, 92, 231, 0.35);
+  --focus-outline-dark: rgba(41, 198, 255, 0.24);
+
+  /* Action roles. */
+  --action-primary-bg: var(--color-indigo);
+  --action-primary-hover: var(--color-indigo-hover);
+  --action-primary-text: var(--color-white);
+  --action-danger-bg: var(--color-red);
+  --action-danger-hover: var(--color-red-hover);
+  --action-danger-text: var(--color-white);
+  --action-disabled-opacity: 0.44;
+
   --header-height: 72px;
+
+  /* Legacy aliases retained during Stage 1 to keep computed output stable. */
+  --navy: var(--color-navy);
+  --indigo: var(--color-indigo);
+  --violet: var(--color-violet);
+  --coral: var(--color-coral);
+  --green: var(--color-green);
+  --blue: var(--color-blue);
+  --cyan: var(--color-cyan);
+  --yellow: var(--color-yellow);
+  --orange: var(--color-orange);
+  --red: var(--color-red);
+  --muted: var(--text-secondary);
+  --line: var(--border);
 }
 
 * {
@@ -44,7 +142,7 @@ body {
   margin: 0;
   color: var(--navy);
   background: var(--canvas);
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--font-body);
   line-height: 1.5;
   text-rendering: optimizeLegibility;
 }
@@ -66,12 +164,12 @@ a {
 }
 
 ::selection {
-  color: #fff;
+  color: var(--text-on-strong);
   background: var(--violet);
 }
 
 :focus-visible {
-  outline: 3px solid rgba(108, 92, 231, 0.35);
+  outline: 3px solid var(--focus-outline);
   outline-offset: 3px;
 }
 

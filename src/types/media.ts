@@ -10,6 +10,7 @@ export interface MediaItem {
   artworkUrl: string;
   sourceUrl: string;
   storefront: string;
+  sourceStorefront?: string;
 }
 
 export interface SearchResponse {
@@ -27,6 +28,7 @@ export interface ShelfCollection {
   id: string;
   name: string;
   itemIds: string[];
+  items?: MediaItem[];
 }
 
 export interface GlobalScanState {

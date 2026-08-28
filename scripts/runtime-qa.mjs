@@ -479,6 +479,211 @@ try {
   console.log('SHELF BULK CONTROLS — PASS');
   console.log('REMOVE ALL CONFIRMATION — PASS');
 
+  await evaluate(`
+    (() => {
+      localStorage.setItem(
+        'mediashelf:v2:recent',
+        JSON.stringify([
+          {
+            term: 'QA Recent One',
+            media: 'music',
+            storefront: 'za',
+          },
+          {
+            term: 'QA Recent Two',
+            media: 'movie',
+            storefront: 'gb',
+          },
+        ])
+      );
+      localStorage.setItem(
+        'mediashelf:v2:prefs',
+        JSON.stringify({
+          term: 'QA Reset',
+          media: 'music',
+          storefront: 'za',
+          sort: 'relevance',
+          view: 'grid',
+        })
+      );
+      return true;
+    })()
+  `);
+
+  await navigate(send, evaluate, '/');
+  await sleep(120);
+
+  const searchFramework = await evaluate(`
+    (async () => {
+      const wait = (ms) =>
+        new Promise((resolve) => setTimeout(resolve, ms));
+
+      const reset = document.querySelector('[data-reset-filters]');
+      const clearRecent = document.querySelector('[data-clear-recent]');
+      const removeRecent = Array.from(
+        document.querySelectorAll('[data-remove-recent]')
+      );
+
+      if (!reset || !clearRecent || removeRecent.length !== 2) {
+        return {
+          controlsPresent: false,
+          removeCount: removeRecent.length,
+        };
+      }
+
+      removeRecent[0].click();
+      await wait(30);
+
+      const afterRemove = JSON.parse(
+        localStorage.getItem('mediashelf:v2:recent') ?? '[]'
+      ).length;
+
+      clearRecent.click();
+      await wait(30);
+
+      const afterClear = JSON.parse(
+        localStorage.getItem('mediashelf:v2:recent') ?? '[]'
+      ).length;
+
+      reset.click();
+      await wait(30);
+
+      const labels = Array.from(
+        document.querySelectorAll('#search label')
+      );
+      const mediaSelect = labels
+        .find((label) => label.textContent?.includes('Media type'))
+        ?.querySelector('select');
+      const storefrontSelect = labels
+        .find((label) => label.textContent?.includes('Storefront'))
+        ?.querySelector('select');
+
+      return {
+        controlsPresent: true,
+        afterRemove,
+        afterClear,
+        media: mediaSelect?.value ?? null,
+        storefront: storefrontSelect?.value ?? null,
+      };
+    })()
+  `);
+
+  if (
+    !searchFramework.controlsPresent ||
+    searchFramework.afterRemove !== 1 ||
+    searchFramework.afterClear !== 0 ||
+    searchFramework.media !== 'all' ||
+    searchFramework.storefront !== 'all'
+  ) {
+    throw new Error(
+      `Search framework controls failed: ${JSON.stringify(searchFramework)}`
+    );
+  }
+
+  console.log('RECENT SEARCH MANAGEMENT — PASS');
+  console.log('RESET FILTERS — PASS');
+
+  await evaluate(`
+    (() => {
+      const items = ${JSON.stringify(fixtures())};
+
+      localStorage.setItem(
+        'mediashelf:v2:favourites',
+        JSON.stringify([items[0]])
+      );
+      localStorage.setItem('mediashelf:v2:collections', '[]');
+      sessionStorage.setItem(
+        'mediashelf:v2:last-search',
+        JSON.stringify({
+          version: 2,
+          term: 'QA Collection',
+          media: 'all',
+          storefront: 'za',
+          results: items,
+          scan: null,
+          timestamp: Date.now(),
+        })
+      );
+      return true;
+    })()
+  `);
+
+  await navigate(send, evaluate, '/results');
+  await sleep(120);
+
+  const collectionFramework = await evaluate(`
+    (async () => {
+      const wait = (ms) =>
+        new Promise((resolve) => setTimeout(resolve, ms));
+
+      const input = document.querySelector(
+        '#results-new-collection-name'
+      );
+      const createButton = document.querySelector(
+        '[data-create-collection]'
+      );
+
+      if (!input || !createButton) {
+        return { controlsPresent: false };
+      }
+
+      const setNativeValue = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        'value'
+      )?.set;
+      setNativeValue?.call(input, 'QA Collection');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      await wait(30);
+      createButton.click();
+      await wait(50);
+
+      const storedCollections = JSON.parse(
+        localStorage.getItem('mediashelf:v2:collections') ?? '[]'
+      );
+      const select = document.querySelector(
+        '[data-result-collection-select]'
+      );
+
+      if (!select || storedCollections.length !== 1) {
+        return {
+          controlsPresent: true,
+          storedCollections: storedCollections.length,
+          selectPresent: Boolean(select),
+        };
+      }
+
+      select.value = storedCollections[0].id;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      await wait(50);
+
+      const afterAdd = JSON.parse(
+        localStorage.getItem('mediashelf:v2:collections') ?? '[]'
+      );
+
+      return {
+        controlsPresent: true,
+        storedCollections: storedCollections.length,
+        selectPresent: true,
+        itemAdded:
+          afterAdd[0]?.itemIds?.includes('qa:1') ?? false,
+      };
+    })()
+  `);
+
+  if (
+    !collectionFramework.controlsPresent ||
+    collectionFramework.storedCollections !== 1 ||
+    !collectionFramework.selectPresent ||
+    !collectionFramework.itemAdded
+  ) {
+    throw new Error(
+      `Result collection framework failed: ${JSON.stringify(collectionFramework)}`
+    );
+  }
+
+  console.log('RESULT COLLECTION WORKFLOW — PASS');
+
   await navigate(send, evaluate, '/');
 
   await evaluate(`
