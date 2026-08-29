@@ -112,13 +112,12 @@ npm run dev
 
 The original repository was a Node/Express iTunes Search application. MediaShelf v2 preserves the useful product idea while replacing the legacy runtime and interface with a modern, accessible application architecture.
 
-The historical implementation remains available through Git history and preservation material under `docs/legacy/`.
+The historical implementation remains available through Git history.
 
 ## Documentation
 
 - [`docs/rebuild-v2-brief.md`](docs/rebuild-v2-brief.md) — current release brief
 - [`docs/apple-storefront-source.md`](docs/apple-storefront-source.md) — Apple storefront source notes
-- [`docs/legacy/`](docs/legacy/) — historical rebuild reference material
 
 ---
 
