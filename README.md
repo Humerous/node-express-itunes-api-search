@@ -2,6 +2,8 @@
 
 **Search. Discover. Save.**
 
+[![MediaShelf showcase](docs/assets/mediashelf-showcase.svg)](https://mediashelf-liard.vercel.app)
+
 [![Live](https://img.shields.io/badge/Live-MediaShelf-6C5CE7?style=flat-square&logo=vercel&logoColor=white)](https://mediashelf-liard.vercel.app)
 [![GitHub](https://img.shields.io/badge/GitHub-Repository-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/Humerous/node-express-itunes-api-search)
 
