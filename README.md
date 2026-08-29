@@ -2,9 +2,12 @@
 
 **Search. Discover. Save.**
 
-MediaShelf is a modern media-discovery workspace built around Apple's iTunes Search API. It began as a 2020 Node/Express portfolio project and was rebuilt in 2026 as a production-ready Next.js and TypeScript application.
+[![Live](https://img.shields.io/badge/Live-MediaShelf-6C5CE7?style=flat-square&logo=vercel&logoColor=white)](https://mediashelf-liard.vercel.app)
+[![GitHub](https://img.shields.io/badge/GitHub-Repository-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/Humerous/node-express-itunes-api-search)
 
-**Live:** https://mediashelf-liard.vercel.app
+**Original repository:** 3 September 2020 · **MediaShelf v2 released:** 28 August 2026
+
+MediaShelf is a modern media-discovery workspace built around Apple's iTunes Search API. It began as a 2020 Node/Express portfolio project and was rebuilt in 2026 as a production-ready Next.js and TypeScript application.
 
 ## What it does
 
