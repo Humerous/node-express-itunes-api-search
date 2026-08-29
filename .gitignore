@@ -10,3 +10,10 @@ coverage/
 !.env.example
 tsconfig.tsbuildinfo
 .vercel
+
+# Local working artifacts
+*.bak
+*.backup
+*.tmp
+*.orig
+.stage*
