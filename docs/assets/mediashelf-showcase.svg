@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">MediaShelf — Search. Discover. Save.</title>
+  <desc id="desc">MediaShelf showcase artwork with original repository date and v2 release date.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#020611"/>
+      <stop offset="0.55" stop-color="#050C1D"/>
+      <stop offset="1" stop-color="#09142B"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#405CFF"/>
+      <stop offset="1" stop-color="#2C2E92"/>
+    </linearGradient>
+    <linearGradient id="violet" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8D32DC"/>
+      <stop offset="1" stop-color="#6C5CE7"/>
+    </linearGradient>
+    <linearGradient id="coral" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FF6B4A"/>
+      <stop offset="1" stop-color="#FF344A"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="22" stdDeviation="28" flood-color="#000" flood-opacity="0.34"/>
+    </filter>
+  </defs>
+
+  <rect width="1600" height="900" rx="42" fill="url(#bg)"/>
+  <circle cx="1260" cy="180" r="290" fill="#405CFF" opacity="0.08"/>
+  <circle cx="1380" cy="720" r="260" fill="#FF344A" opacity="0.06"/>
+
+  <g filter="url(#shadow)" transform="translate(115 145)">
+    <rect x="0" y="0" width="360" height="520" rx="62" fill="#101C4A" stroke="#293C85" stroke-width="3"/>
+    <rect x="105" y="82" width="360" height="520" rx="62" fill="url(#blue)" stroke="#5570FF" stroke-width="3"/>
+    <rect x="210" y="164" width="360" height="520" rx="62" fill="url(#violet)" stroke="#9A6BFF" stroke-width="3"/>
+    <rect x="315" y="246" width="360" height="520" rx="62" fill="url(#coral)" stroke="#FF7A63" stroke-width="3"/>
+    <path d="M470 394 L470 618 Q470 645 491 655 Q505 662 520 651 L650 557 Q674 539 650 520 L520 427 Q504 415 490 422 Q470 432 470 394Z" fill="#fff"/>
+  </g>
+
+  <g font-family="Inter, Arial, sans-serif">
+    <text x="875" y="255" fill="#F5F7FB" font-size="104" font-weight="700" letter-spacing="-4">MediaShelf</text>
+    <text x="880" y="330" font-size="42" font-weight="600">
+      <tspan fill="#29C6FF">Search.</tspan>
+      <tspan fill="#8D32DC">  Discover.</tspan>
+      <tspan fill="#FF6B4A">  Save.</tspan>
+    </text>
+    <text x="880" y="408" fill="#9AA6BA" font-size="27">A 2020 Node/Express portfolio project, rebuilt and</text>
+    <text x="880" y="448" fill="#9AA6BA" font-size="27">released in 2026 as a modern Next.js + TypeScript app.</text>
+
+    <rect x="880" y="520" width="300" height="74" rx="20" fill="#0D1424" stroke="#405CFF" stroke-width="2"/>
+    <text x="922" y="567" fill="#F5F7FB" font-size="26" font-weight="600">GitHub Repository</text>
+
+    <rect x="1205" y="520" width="270" height="74" rx="20" fill="#0D1424" stroke="#FF6B4A" stroke-width="2"/>
+    <text x="1256" y="567" fill="#F5F7FB" font-size="26" font-weight="600">Live MediaShelf</text>
+
+    <line x1="880" y1="655" x2="1475" y2="655" stroke="#263552" stroke-width="2"/>
+    <text x="880" y="714" fill="#9AA6BA" font-size="19" font-weight="600" letter-spacing="2">ORIGINAL REPOSITORY</text>
+    <text x="880" y="760" fill="#F5F7FB" font-size="34" font-weight="700">3 Sep 2020</text>
+    <text x="1180" y="714" fill="#9AA6BA" font-size="19" font-weight="600" letter-spacing="2">V2 REBUILT &amp; RELEASED</text>
+    <text x="1180" y="760" fill="#F5F7FB" font-size="34" font-weight="700">28 Aug 2026</text>
+    <text x="880" y="828" fill="#60708D" font-size="20">Chameleon Unicode Studios · 2020 → 2026</text>
+  </g>
+</svg>
