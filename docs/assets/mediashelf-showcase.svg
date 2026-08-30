@@ -28,12 +28,12 @@
   <circle cx="1260" cy="180" r="290" fill="#405CFF" opacity="0.08"/>
   <circle cx="1380" cy="720" r="260" fill="#FF344A" opacity="0.06"/>
 
-  <g filter="url(#shadow)" transform="translate(115 145)">
+  <g filter="url(#shadow)" transform="translate(115 110)">
     <rect x="0" y="0" width="360" height="520" rx="62" fill="#101C4A" stroke="#293C85" stroke-width="3"/>
     <rect x="105" y="82" width="360" height="520" rx="62" fill="url(#blue)" stroke="#5570FF" stroke-width="3"/>
     <rect x="210" y="164" width="360" height="520" rx="62" fill="url(#violet)" stroke="#9A6BFF" stroke-width="3"/>
     <rect x="315" y="246" width="360" height="520" rx="62" fill="url(#coral)" stroke="#FF7A63" stroke-width="3"/>
-    <path d="M470 394 L470 618 Q470 645 491 655 Q505 662 520 651 L650 557 Q674 539 650 520 L520 427 Q504 415 490 422 Q470 432 470 394Z" fill="#fff"/>
+    <path d="M450 410 L450 602 L610 506 Z" fill="#fff" stroke="#fff" stroke-width="18" stroke-linejoin="round" stroke-linecap="round"/>
   </g>
 
   <g font-family="Inter, Arial, sans-serif">
