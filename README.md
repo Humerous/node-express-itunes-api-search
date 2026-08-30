@@ -25,7 +25,7 @@ MediaShelf lets you search across Apple storefronts and media types, review resu
 
 ## Architecture
 
-MediaShelf uses a three-route Next.js App Router structure:
+MediaShelf uses three user-facing Next.js App Router pages plus one server-side API route:
 
 - `/` — Search
 - `/results` — Results
