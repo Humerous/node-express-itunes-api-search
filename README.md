@@ -4,7 +4,13 @@
 
 [![MediaShelf showcase](docs/assets/mediashelf-showcase.svg)](https://mediashelf-chameleon.vercel.app)
 
-MediaShelf is a modern media-discovery workspace built around Apple's iTunes Search API. It began as a 2020 Node/Express portfolio project and was rebuilt in 2026 as a production-ready Next.js and TypeScript application.
+A production-ready Next.js and TypeScript media-discovery workspace built around Apple's iTunes Search API.
+
+**Live:** [mediashelf-chameleon.vercel.app](https://mediashelf-chameleon.vercel.app)  
+**Stack:** Next.js · React · TypeScript · Apple iTunes Search API · Vercel  
+**Status:** v2 · Production / Live
+
+Originally a 2020 Node/Express portfolio project, MediaShelf was rebuilt in 2026 while preserving the original product idea and repository history.
 
 ## What it does
 
