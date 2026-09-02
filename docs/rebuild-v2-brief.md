@@ -6,7 +6,7 @@ MediaShelf V2 is the active modernised and production-released version of the or
 
 The historical implementation remains preserved in Git history and on the dedicated preservation branch. This document describes the released V2 implementation.
 
-**Production:** https://mediashelf-liard.vercel.app
+**Production:** https://mediashelf-chameleon.vercel.app
 
 **Release commit:** `587e8ab` — `feat: complete MediaShelf v2 rebuild`
 
